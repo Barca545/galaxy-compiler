@@ -3,6 +3,30 @@ use std::{collections::HashMap, mem::size_of};
 //should data type be shared with the parser
 //Symbol should be a u32 maybe make it an struct in the Interner
 
+// struct SymbolTable{
+//   //a normal Rc instead of a Weak might be fine here.
+//    parent:Option<Weak<SymbolTable>>,
+//    //the u32 is an index into my string interner
+//    table: HashMap<u32, SymbolData>
+//  }
+
+//  struct SymbolData{
+//    ty: Option<Ty>,
+//    //The register it is allocated
+//    reg: Option<usize>,
+//    children:Vec<SymbolTable>
+//  }
+
+//  impl SymbolTable{
+//    fn lookup(&self, name:u32) -> Option<SymbolData> {
+//      match self.table.get(name){
+//        //might be a more elegant way to do this
+//        Some(sym) => Some(sym),
+//        None => self.parent.lookup(name)
+//      }
+//    }
+//  }
+
 enum SymanticType {}
 
 enum DataType {
@@ -11,7 +35,9 @@ enum DataType {
   Usize,
 }
 #[derive(Debug, Clone,)]
-pub struct Symbol;
+pub struct Symbol {
+  pub idx:u32,
+}
 
 struct AttributeTable {}
 

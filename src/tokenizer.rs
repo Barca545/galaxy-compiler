@@ -6,13 +6,13 @@ use super::token::{Chunk, Token};
 // Refactor:
 // - Add catching types to the filter pass and move it out of the token
 //   formation. This will make it easier to add types later if desired.
+// - I think I need to rework how chunks work/remove them from the tokenizer.
 
 pub type TokenStream = Vec<Token,>;
 
 pub fn tokenize(source:&str,) -> TokenStream {
   let mut tokens = Vec::new();
   let mut chunk = Chunk::new();
-  let mut is_string = false;
   let mut is_comment = false;
 
   let chars = source.chars().collect::<Vec<char,>>();
@@ -35,89 +35,37 @@ pub fn tokenize(source:&str,) -> TokenStream {
     if !is_comment {
       match ch {
         '\"' => {
-          if is_string {
+          if chunk.is_string {
             chunk.push('\"',);
             tokens.push(chunk.to_token(),)
           }
           else {
             chunk.push('\"',)
           }
-          is_string = !is_string;
+          chunk.is_string = !chunk.is_string;
         }
-        ' ' => {
-          if is_string {
-            chunk.push(' ',);
-          }
-          else if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),)
-          }
-        }
-        '\r' => {
-          if is_string {
-            chunk.push('\r',);
-          }
-          else if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),)
-          }
-        }
-        '\t' => {
-          if is_string {
-            chunk.push('\t',);
+        ' ' | '\r' | '\t' => {
+          if chunk.is_string {
+            chunk.push(ch,);
           }
           else if chunk.len() > 0 {
             tokens.push(chunk.to_token(),)
           }
         }
         '\n' => {
-          chunk.newline = true;
-          if is_string {
-            chunk.push('\n',);
+          if chunk.is_string {
+            chunk.push(ch,);
           }
           else if chunk.len() > 0 {
             tokens.push(chunk.to_token(),);
           }
+          chunk.newline = true;
         }
-        ';' => {
+        ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
           if chunk.len() > 0 {
             tokens.push(chunk.to_token(),);
           }
-          tokens.push(chunk.new_token(";",),);
-        }
-        '(' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token("(",),);
-        }
-        ')' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token(")",),);
-        }
-        '{' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token("{",),);
-        }
-        '}' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token("}",),);
-        }
-        '[' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token("[",),);
-        }
-        ']' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token("]",),);
+          tokens.push(chunk.new_token(ch.to_string(),),);
         }
         _ => chunk.push(ch,),
       }
@@ -127,15 +75,13 @@ pub fn tokenize(source:&str,) -> TokenStream {
   //Add the EOF token
   tokens.push(Token::new(None, chunk.loc(),),);
 
-  // filter(&mut tokens,);
   tokens
 }
 
 #[cfg(test)]
 mod test {
-  use crate::{interner::lookup, token::TokenKind};
-
   use super::tokenize;
+  use crate::{interner::lookup, token::TokenKind};
 
   #[test]
   fn tokens_are_generated() {

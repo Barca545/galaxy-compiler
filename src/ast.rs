@@ -1,8 +1,13 @@
+use crate::interner::lookup;
+
 use super::{
   symbol_table::Symbol,
   token::{Location, Token, TokenKind},
 };
-use std::ops::Deref;
+use std::{
+  fmt::{Debug, Display},
+  ops::Deref,
+};
 
 // Convert the Strings into u32s
 
@@ -61,7 +66,7 @@ pub enum LiteralKind {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Eq,)]
+#[derive(Clone, PartialEq, Eq,)]
 pub enum BinOpKind {
   MINUS,
   PLUS,
@@ -73,6 +78,29 @@ pub enum BinOpKind {
   GREATER_EQUAL,
   LESS,
   LESS_EQUAL,
+}
+
+impl Debug for BinOpKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    Display::fmt(&self, f,)
+  }
+}
+
+impl Display for BinOpKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    match self {
+      BinOpKind::MINUS => write!(f, "-"),
+      BinOpKind::PLUS => write!(f, "+"),
+      BinOpKind::SLASH => write!(f, "/"),
+      BinOpKind::STAR => write!(f, "*"),
+      BinOpKind::EQUAL_EQUAL => write!(f, "=="),
+      BinOpKind::NOT_EQUAL => write!(f, "!="),
+      BinOpKind::GREATER => write!(f, ">"),
+      BinOpKind::GREATER_EQUAL => write!(f, ">="),
+      BinOpKind::LESS => write!(f, "<"),
+      BinOpKind::LESS_EQUAL => write!(f, "<="),
+    }
+  }
 }
 
 impl From<Token,> for BinOpKind {
@@ -99,7 +127,7 @@ pub struct Literal {
   pub symbol:Symbol,
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Clone,)]
 pub enum ExpressionKind {
   Literal(P<Literal,>,),
   ///A binary operation i.e.`true == false`
@@ -110,6 +138,22 @@ pub enum ExpressionKind {
   If(P<Expression,>, P<Vec<Statement,>,>, Option<P<Expression,>,>,),
   // Call,
   // Array
+}
+
+impl Debug for ExpressionKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    Display::fmt(&self, f,)
+  }
+}
+
+impl Display for ExpressionKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    match self {
+      Self::Literal(lit,) => write!(f, "LITERAL({})", lookup(lit.symbol.idx),),
+      Self::BinOp(left, op, right,) => write!(f, "BINOP({} {:?} {})", left.kind, op, right.kind),
+      _ => panic!(),
+    }
+  }
 }
 
 #[derive(Debug, Clone,)]
@@ -416,3 +460,9 @@ impl AbstractSyntaxTree {
 //     /// Acts as a null expression. Lowering it will always emit a bug.
 //     Dummy,
 // }
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn expressions_display() {}
+}

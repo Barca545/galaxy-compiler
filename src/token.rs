@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use super::{errors::ParsingError, interner::intern};
 
 // TODO:
@@ -9,12 +11,24 @@ use super::{errors::ParsingError, interner::intern};
 // Refactor:
 // - Debating getting rid of the difference between floats and ints and just
 //   using floats only
+// - This and the tokenizer need to treat Minus signs as their own token always
 
-#[derive(Debug, Clone, Copy,)]
+#[derive(Clone, Copy,)]
 pub(super) struct Location {
   pub(super) line:u32,
   pub(super) col:u32,
   pub(super) index:usize,
+}
+
+impl Debug for Location {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    Display::fmt(&self, f,)
+  }
+}
+impl Display for Location {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    write!(f, "Ln {} Col {} Index {}", self.line, self.col, self.index)
+  }
 }
 
 impl Location {
@@ -219,6 +233,7 @@ pub struct Chunk {
   loc:Location,
   val:String,
   pub newline:bool,
+  pub is_string:bool,
 }
 
 impl Chunk {
@@ -228,17 +243,12 @@ impl Chunk {
       loc:Location::new(),
       val:String::new(),
       newline:false,
+      is_string:false,
     }
   }
 
   pub fn push(&mut self, ch:char,) {
     self.val.push(ch,);
-    if ch == '\n' {
-      self.newline = true
-    }
-    else {
-      self.newline = false
-    }
   }
 
   pub fn len(&self,) -> usize {
@@ -257,7 +267,7 @@ impl Chunk {
   }
 
   ///Create a new [`Token`] from a [`String`].
-  pub fn new_token(&mut self, val:&str,) -> Token {
+  pub fn new_token(&mut self, val:String,) -> Token {
     //Ensure the pointer is to the front of the token.
     let mut loc = self.loc;
     loc.col -= self.val.chars().count() as u32;
@@ -295,7 +305,9 @@ impl Token {
     }
   }
 
-  pub fn precedence(&self,) -> u32 {
+  ///Returns the left binding power of the [`Token`]. For an infix `Token`, it
+  /// tells us how strongly the `Token` binds to the `Token` at its left.
+  pub fn lbp(&self,) -> u32 {
     // Need to add Or and And?
 
     // pub const ASSIGNMENT: i32  = 1;
@@ -308,13 +320,15 @@ impl Token {
     // pub const CALL: i32        = 8;
 
     match self.kind {
+      // Wrappers
+      // TokenKind::LEFT_PAREN | TokenKind::RIGHT_PAREN => 0,
       // Assign expressions
       TokenKind::EQUAL | TokenKind::MINUS_EQUAL | TokenKind::PLUS_EQUAL | TokenKind::SLASH_EQUAL | TokenKind::STAR_EQUAL => 10,
       // Conditional expressions
       TokenKind::IF | TokenKind::ELSE => 20,
       // Math expressions
-      TokenKind::STAR | TokenKind::SLASH => 30,
-      TokenKind::MINUS | TokenKind::PLUS => 40,
+      TokenKind::MINUS | TokenKind::PLUS => 30,
+      TokenKind::STAR | TokenKind::SLASH => 40,
       // Comparison expressions
       TokenKind::EQUAL_EQUAL | TokenKind::NOT_EQUAL | TokenKind::GREATER | TokenKind::GREATER_EQUAL | TokenKind::LESS | TokenKind::LESS_EQUAL => 60,
       // Anything else should cause the expression parsing to terminate

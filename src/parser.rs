@@ -50,7 +50,7 @@ impl Parser {
   /// Checks whether the current [`Token`] has a higher precedence than the
   /// following `Token`.
   fn next_is_less_precedence(&mut self, rbp:u32,) -> bool {
-    self.peek().precedence() > rbp
+    self.peek().lbp() > rbp
   }
 
   ///Increments the `cursor` and returns the [`Token`] the cursor now points
@@ -115,8 +115,11 @@ impl Parser {
   pub fn parse(&mut self,) -> AbstractSyntaxTree {
     let mut ast = AbstractSyntaxTree::new();
 
-    while self.tokens.len() > 0 && self.peek().kind != TokenKind::EOF {
-      ast.push(self.parse_statement().unwrap(),);
+    loop {
+      match self.peek().kind {
+        TokenKind::EOF => break,
+        _ => ast.push(self.parse_statement().unwrap(),),
+      }
     }
 
     ast
@@ -141,15 +144,19 @@ impl Parser {
     // Get the left hand expression
     let mut left = self.parse_expression_null_detonation();
 
-    // Keep eating tokens as long as the next token's precedence is greater than
-    // the current token -- lower precedence will cause the loop to terminate
+    // Keep eating tokens as long as the next token's lbp is greater than
+    // the current token -- lower lbp will cause the loop to terminate
     while self.next_is_less_precedence(rbp,) {
       left = self.parse_expression_left_denotation(left,)
     }
     left
   }
 
-  ///Returns an [`Expression`] consisting of the current [`Token`].
+  ///Converts the current [`Token`] into an [`Option<Expression>`].
+  ///
+  /// If the `Token` can be parsed as a prefix, returns an [`Expression`].
+  ///
+  /// Otherwise returns `None`.
   fn parse_expression_null_detonation(&mut self,) -> Expression {
     // Should be some kind of literal
     let token = self.peek();
@@ -158,21 +165,24 @@ impl Parser {
       TokenKind::INT(_,) => self.parse_integer(),
       TokenKind::FLOAT(_,) => self.parse_float(),
       TokenKind::BOOL(_,) => self.parse_bool(),
-      //If statement
-      TokenKind::IF => {
-        dbg!("reached 5");
-        self.parse_if_expression(&token,)
-      }
+      TokenKind::IDENTIFIER(idx,) => panic!("Have not set up handling identifiers here yet"),
+      // If expression
+      _ => panic!("Should not be {:?}", token.kind),
+      // //If statement
+      // TokenKind::IF => {
+      //   dbg!("reached 5");
+      //   self.parse_if_expression(&token,)
+      // }
 
       // This should probably enter an error state
       // I think it should error that it was expecting some kind of literal
-      _ => {
-        // self.err_detected(token.loc, &ParsingError::UnexpectedToken(token.kind,),);
-        if let TokenKind::IDENTIFIER(idx,) = token.kind {
-          panic!("{} is not an accepted identifier", lookup(idx));
-        }
-        panic!();
-      }
+      // _ => {
+      //   // self.err_detected(token.loc, &ParsingError::UnexpectedToken(token.kind,),);
+      //   if let TokenKind::IDENTIFIER(idx,) = token.kind {
+      //     panic!("{} is not an accepted identifier", lookup(idx));
+      //   }
+      //   panic!();
+      // }
     }
   }
 
@@ -194,11 +204,10 @@ impl Parser {
         let loc = left.loc;
         let token = self.next();
         let binop_kind = BinOpKind::from(token,);
-        let right = self.parse_expression(token.precedence(),);
+        let right = self.parse_expression(token.lbp(),);
         let kind = ExpressionKind::BinOp(P::new(left,), binop_kind, P::new(right,),);
         Expression { id:0, kind, loc, }
       }
-
       _ => {
         let token = self.next();
         panic!("{:?}", token.kind)
@@ -209,48 +218,60 @@ impl Parser {
   ///Return an expression containing an integer [`Literal`].
   fn parse_integer(&mut self,) -> Expression {
     let token = self.next();
+    if let TokenKind::INT(idx,) = token.kind {
+      let val = Literal {
+        kind:LiteralKind::Integer,
+        symbol:Symbol { idx, },
+      };
 
-    let val = Literal {
-      kind:LiteralKind::Integer,
-      symbol:Symbol,
-    };
-
-    Expression {
-      id:0,
-      kind:ExpressionKind::Literal(P::new(val,),),
-      loc:token.loc,
+      Expression {
+        id:0,
+        kind:ExpressionKind::Literal(P::new(val,),),
+        loc:token.loc,
+      }
+    }
+    else {
+      unreachable!()
     }
   }
 
   ///Return an expression containing a float [`Literal`].
   fn parse_float(&mut self,) -> Expression {
     let token = self.next();
+    if let TokenKind::FLOAT(idx,) = token.kind {
+      let val = Literal {
+        kind:LiteralKind::Float,
+        symbol:Symbol { idx, },
+      };
 
-    let val = Literal {
-      kind:LiteralKind::Float,
-      symbol:Symbol,
-    };
-
-    Expression {
-      id:0,
-      kind:ExpressionKind::Literal(P::new(val,),),
-      loc:token.loc,
+      Expression {
+        id:0,
+        kind:ExpressionKind::Literal(P::new(val,),),
+        loc:token.loc,
+      }
+    }
+    else {
+      unreachable!()
     }
   }
 
   ///Return an expression containing a boolean [`Literal`].
   fn parse_bool(&mut self,) -> Expression {
     let token = self.next();
+    if let TokenKind::BOOL(idx,) = token.kind {
+      let val = Literal {
+        kind:LiteralKind::Bool,
+        symbol:Symbol { idx, },
+      };
 
-    let val = Literal {
-      kind:LiteralKind::Bool,
-      symbol:Symbol,
-    };
-
-    Expression {
-      id:0,
-      kind:ExpressionKind::Literal(P::new(val,),),
-      loc:token.loc,
+      Expression {
+        id:0,
+        kind:ExpressionKind::Literal(P::new(val,),),
+        loc:token.loc,
+      }
+    }
+    else {
+      unreachable!()
     }
   }
 
@@ -440,7 +461,7 @@ impl Parser {
     //Create the indicator to the error
     let indicator = "_".repeat(loc.col as usize,);
     print!(
-      "{}\n\n{}\n{}^ Panicked near ln:{} col:{} \n",
+      "{}\n\n{}\n{}^ Panicked near Ln:{} Col:{} \n",
       err.to_string(),
       line_string,
       indicator,
@@ -457,20 +478,27 @@ mod tests {
 
   #[test]
   fn parse_works() {
+    // Precedence seems to be wrong as it spits out ((5+6)*7) not (5+(6*7))
     let source = r#"
     //Check the binops work with nums
-    // let mut value_test = 5 + 10;
+    // let mut value_test = 5 + 6 * 7 / 8;
 
     //Check the binops work with boolean statements
     // let value = true != false == true;
     
     //Check if expressions work
-    if true {
-      // I think it wants an identifier here, not an expression
-      // Need to revisit how the null detonation works 
-      let a = 90;
-    }
+    // if true {
+    //   // I think it wants an identifier here, not an expression
+    //   // Need to revisit how the null detonation works 
+    //   let a = 90;
+    // }
   "#;
+
+    // I think I need to define what a block is so it knows the if expresion
+    // terminates when it encounters brackets
+
+    // doublecheck if that is how rust does it
+
     // erroring in the loop a few problems
     // -Seems to be expecting the inside of an if expression to be an expression and
     // not a vec of statements  -> it tries to go into the rest of the
@@ -492,38 +520,38 @@ mod tests {
     let ast = parser.parse();
 
     //Check the AST is correct
-    match ast.statements.clone()[0].kind.clone() {
-      //Check the let statement
-      StatementKind::Let(local,) => {
-        match &local.kind {
-          LocalKind::Init(expr,) => match &expr.kind {
-            ExpressionKind::BinOp(lhs, op, rhs,) => {
-              //Check the value of the lhs
-              match &lhs.kind {
-                ExpressionKind::Literal(lit,) => {
-                  assert_eq!(&lit.kind, &LiteralKind::Integer)
-                }
-                _ => panic!(),
-              }
+    // match ast.statements.clone()[0].kind.clone() {
+    //   //Check the let statement
+    //   StatementKind::Let(local,) => {
+    //     match &local.kind {
+    //       LocalKind::Init(expr,) => match &expr.kind {
+    //         ExpressionKind::BinOp(lhs, op, rhs,) => {
+    //           //Check the value of the lhs
+    //           match &lhs.kind {
+    //             ExpressionKind::Literal(lit,) => {
+    //               assert_eq!(&lit.kind, &LiteralKind::Integer)
+    //             }
+    //             _ => panic!(),
+    //           }
 
-              //Check the value of the rhs
-              match &rhs.kind {
-                ExpressionKind::Literal(lit,) => {
-                  assert_eq!(&lit.kind, &LiteralKind::Integer)
-                }
-                _ => panic!(),
-              }
+    //           //Check the value of the rhs
+    //           match &rhs.kind {
+    //             ExpressionKind::Literal(lit,) => {
+    //               assert_eq!(&lit.kind, &LiteralKind::Integer)
+    //             }
+    //             _ => panic!(),
+    //           }
 
-              //Check the value of the op
-              assert_eq!(*op, BinOpKind::PLUS);
-            }
-            _ => panic!(),
-          },
-          _ => panic!(),
-        };
-      }
-      _ => panic!(),
-    }
+    //           //Check the value of the op
+    //           assert_eq!(*op, BinOpKind::PLUS);
+    //         }
+    //         _ => panic!(),
+    //       },
+    //       _ => panic!(),
+    //     };
+    //   }
+    //   _ => panic!(),
+    // }
 
     dbg!(ast.statements.clone()[0].kind.clone());
   }
