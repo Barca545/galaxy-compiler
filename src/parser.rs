@@ -130,7 +130,6 @@ impl Parser {
 impl Parser {
   ///Returns a [`Statement`].
   fn parse_statement(&mut self,) -> Result<Statement,> {
-    dbg!(self.peek().kind);
     match self.peek().kind {
       TokenKind::LET => Ok(self.parse_let(),),
       _ => Ok(self.parse_expression_statement(),),
@@ -158,31 +157,16 @@ impl Parser {
   ///
   /// Otherwise returns `None`.
   fn parse_expression_null_detonation(&mut self,) -> Expression {
-    // Should be some kind of literal
+    // Should be a prefix
     let token = self.peek();
 
     match token.kind {
       TokenKind::INT(_,) => self.parse_integer(),
       TokenKind::FLOAT(_,) => self.parse_float(),
       TokenKind::BOOL(_,) => self.parse_bool(),
+      TokenKind::IF => self.parse_if_expression(),
       TokenKind::IDENTIFIER(idx,) => panic!("Have not set up handling identifiers here yet"),
-      // If expression
       _ => panic!("Should not be {:?}", token.kind),
-      // //If statement
-      // TokenKind::IF => {
-      //   dbg!("reached 5");
-      //   self.parse_if_expression(&token,)
-      // }
-
-      // This should probably enter an error state
-      // I think it should error that it was expecting some kind of literal
-      // _ => {
-      //   // self.err_detected(token.loc, &ParsingError::UnexpectedToken(token.kind,),);
-      //   if let TokenKind::IDENTIFIER(idx,) = token.kind {
-      //     panic!("{} is not an accepted identifier", lookup(idx));
-      //   }
-      //   panic!();
-      // }
     }
   }
 
@@ -275,31 +259,18 @@ impl Parser {
     }
   }
 
-  fn parse_if_expression(&mut self, token:&Token,) -> Expression {
-    dbg!("reached here 1");
+  fn parse_if_expression(&mut self,) -> Expression {
+    let token = self.next();
     // Parse the conditional expression
     let condition = self.parse_expression(0,);
     let loc = token.loc;
 
-    dbg!("reached here 2");
-
-    // Parse the statement making up its body
-    self
-      .eat_token_expect(TokenKind::LEFT_BRACE, "Must follow if statement with a brace `{`",)
-      .unwrap();
-
-    dbg!("reached here 3");
-
-    let mut if_body = Vec::new();
-
-    while self.peek().kind != TokenKind::RIGHT_BRACE {
-      if_body.push(self.parse_statement().unwrap(),);
-    }
+    // Parse the if block
+    let if_body = self.parse_block();
 
     // Check for an else statment and parse it if so
     let else_body = if self.eat_token_if_match(TokenKind::ELSE,) {
-      let else_expr = self.parse_expression(0,);
-      Some(P::new(else_expr,),)
+      Some(P::new(self.parse_block(),),)
     }
     else {
       None
@@ -310,6 +281,22 @@ impl Parser {
       kind:ExpressionKind::If(P::new(condition,), P::new(if_body,), else_body,),
       loc,
     }
+  }
+
+  /// Parses a block (`{Vec<Statemnent>}`).
+  fn parse_block(&mut self,) -> Vec<Statement,> {
+    self
+      .eat_token_expect(TokenKind::LEFT_BRACE, "Must follow if statement condition with a brace `{`",)
+      .unwrap();
+
+    let mut block = Vec::new();
+
+    while self.peek().kind != TokenKind::RIGHT_BRACE {
+      block.push(self.parse_statement().unwrap(),);
+    }
+
+    self.eat_token_expect(TokenKind::RIGHT_BRACE, "Blocks must end with a right brace",).unwrap();
+    block
   }
 
   ///Parse a `let` [`Statement`] (`let <pat>::<ty> = <expr>`).
@@ -350,15 +337,10 @@ impl Parser {
 
   ///Parse an [`Expression`] as a [`Statement`].
   fn parse_expression_statement(&mut self,) -> Statement {
-    let token = self.next();
-    let loc = token.loc;
-    let expression = self.parse_expression(0,);
-    dbg!(expression.clone());
-
     Statement {
       id:0,
-      loc,
-      kind:StatementKind::Expression(expression,),
+      loc:self.peek().loc,
+      kind:StatementKind::Expression(self.parse_expression(0,),),
     }
   }
 
@@ -478,43 +460,34 @@ mod tests {
 
   #[test]
   fn parse_works() {
-    // Precedence seems to be wrong as it spits out ((5+6)*7) not (5+(6*7))
+    // Add rebinding identifiers
+    // Add loops
+    // Add arrays
+    // Add function calls
+    // Add back the error checking for the AST
+
+    // basically just an expression that takes an identifier then does parse local
+    // kind
+    // rework let expressions to use the assgin expr assign takes an expr because it
+    // sometimes allows for setting a tuple to an output
+
+    // How do if expressions return?
+
     let source = r#"
     //Check the binops work with nums
-    // let mut value_test = 5 + 6 * 7 / 8;
+    let mut value_test = 5 + 6 * 7 / 8;
 
-    //Check the binops work with boolean statements
-    // let value = true != false == true;
+    //Check the bdinops work with boolean statements
+    let value = true != false == true;
     
     //Check if expressions work
-    // if true {
-    //   // I think it wants an identifier here, not an expression
-    //   // Need to revisit how the null detonation works 
-    //   let a = 90;
-    // }
+    let test = if true != false {
+      let a = 90;
+    }
+    else {
+      let a = 50;
+    };
   "#;
-
-    // I think I need to define what a block is so it knows the if expresion
-    // terminates when it encounters brackets
-
-    // doublecheck if that is how rust does it
-
-    // erroring in the loop a few problems
-    // -Seems to be expecting the inside of an if expression to be an expression and
-    // not a vec of statements  -> it tries to go into the rest of the
-    // expression parsing so it expects let to be an expression because it's
-    // treating it life the lefthand side
-    // - Still have a precedence problem with the if's inner
-
-    //Look into what the null detonation is supposed to be, because currently the
-    // if has to be there instead of the left
-
-    //might also just never be reaching the if branch for some reason
-    //seems like it thinks the { begins a new statement
-
-    //it skips past the if because of the next in the parse expressions function
-    // the problem is for *just* parsing expressions it needs the next()
-    // but for parsing  expression statements it can't have the next
 
     let mut parser = Parser::new(source,);
     let ast = parser.parse();
@@ -553,6 +526,6 @@ mod tests {
     //   _ => panic!(),
     // }
 
-    dbg!(ast.statements.clone()[0].kind.clone());
+    // dbg!(ast.statements.clone()[0].kind.clone());
   }
 }

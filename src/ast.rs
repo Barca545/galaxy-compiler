@@ -135,7 +135,14 @@ pub enum ExpressionKind {
   /// An `if` block, with an optional `else` block.
   ///
   /// `if expr { Vec<Statement> } else { expr }`
-  If(P<Expression,>, P<Vec<Statement,>,>, Option<P<Expression,>,>,),
+  If(P<Expression,>, P<Vec<Statement,>,>, Option<P<Vec<Statement,>,>,>,),
+  //     /// An assignment (`a = foo()`).
+  //     /// The `Span` argument is the span of the `=` token.
+  //     Assign(P<Expr>, P<Expr>, Span),
+  //     /// An assignment with an operator.
+  //     ///
+  //     /// E.g., `a += 1`.
+  //     AssignOp(BinOp, P<Expr>, P<Expr>),
   // Call,
   // Array
 }
