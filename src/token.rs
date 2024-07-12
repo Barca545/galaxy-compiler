@@ -6,12 +6,13 @@ use super::{errors::ParsingError, interner::intern};
 // - Not sure I need the double colon operator
 // - How do tokenizers actually handle type declarations
 // - switch from passing in an interner to using the INTERNER directly
-// - Remove the
 
 // Refactor:
-// - Debating getting rid of the difference between floats and ints and just
-//   using floats only
-// - This and the tokenizer need to treat Minus signs as their own token always
+// - Have one number type that is an f32 under the hood no float/int distinction
+// - This and the tokenizer need to treat Minus and ! signs as their own token
+//   because they are Unary operators
+// - Use spans (the range of indices in the source code a token covers) instead
+//   of locations
 
 #[derive(Clone, Copy,)]
 pub(super) struct Location {

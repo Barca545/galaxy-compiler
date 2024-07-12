@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 // Refactor:
 // - Use the final implementation from here: https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html
+// - Key might need to be "Symbol"
 
 pub struct Interner {
   map:HashMap<String, u32,>,
@@ -34,10 +35,12 @@ impl Interner {
 
 thread_local! {pub static INTERNER:RefCell<Interner,> = RefCell::new(Interner::new(),)}
 
+/// Adds a string to the global string [`Interner`] and returns its key.
 pub fn intern(str:&str,) -> u32 {
   INTERNER.with_borrow_mut(|interner| interner.intern(str,),)
 }
 
+/// Retrieve a string from the global string [`Interner`] by its key.
 pub fn lookup(idx:u32,) -> String {
   INTERNER.with_borrow(|interner| interner.lookup(idx,).to_owned(),)
 }

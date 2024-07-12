@@ -6,9 +6,12 @@ use super::{
   token::{Location, Token, TokenKind},
   tokenizer::tokenize,
 };
-use crate::ast::{StatementKind, P};
+use crate::ast::{AssignOpKind, StatementKind, P};
 use eyre::Result;
 use std::{iter::Peekable, vec::IntoIter};
+
+// Rust uses Paths instead of just identifiers but since I am not doing multiple
+// modules and don't need to support that there is no need
 
 // Refactor:
 // - next has higher precedence might need a less than sign
@@ -130,12 +133,12 @@ impl Parser {
 impl Parser {
   ///Returns a [`Statement`].
   fn parse_statement(&mut self,) -> Result<Statement,> {
-    match self.peek().kind {
-      TokenKind::LET => Ok(self.parse_let(),),
-      _ => Ok(self.parse_expression_statement(),),
-      // _ => panic!(),
-      // Err(ParsingError::NoStatementMatch.into(),)
-    }
+    let statement = match self.peek().kind {
+      TokenKind::LET => self.parse_let(),
+      _ => self.parse_expression_statement(),
+    };
+    self.eat_token_expect(TokenKind::SEMICOLON, "Statements must end with a semicolon.",).unwrap();
+    Ok(statement,)
   }
 
   ///Returns an [`Expression`].
@@ -151,6 +154,15 @@ impl Parser {
     left
   }
 
+  ///Parse an [`Expression`] as a [`Statement`].
+  fn parse_expression_statement(&mut self,) -> Statement {
+    Statement {
+      id:0,
+      loc:self.peek().loc,
+      kind:StatementKind::Expression(self.parse_expression(0,),),
+    }
+  }
+
   ///Converts the current [`Token`] into an [`Option<Expression>`].
   ///
   /// If the `Token` can be parsed as a prefix, returns an [`Expression`].
@@ -158,23 +170,21 @@ impl Parser {
   /// Otherwise returns `None`.
   fn parse_expression_null_detonation(&mut self,) -> Expression {
     // Should be a prefix
-    let token = self.peek();
-
-    match token.kind {
-      TokenKind::INT(_,) => self.parse_integer(),
-      TokenKind::FLOAT(_,) => self.parse_float(),
-      TokenKind::BOOL(_,) => self.parse_bool(),
+    match self.peek().kind {
+      TokenKind::INT(_,) | TokenKind::FLOAT(_,) | TokenKind::BOOL(_,) => self.parse_literal(),
       TokenKind::IF => self.parse_if_expression(),
-      TokenKind::IDENTIFIER(idx,) => panic!("Have not set up handling identifiers here yet"),
-      _ => panic!("Should not be {:?}", token.kind),
+      TokenKind::IDENTIFIER(_,) => self.parse_ident_expression(),
+      TokenKind::LEFT_PAREN => self.parse_tuple_expression(),
+      _ => panic!("Should not be {:?}", self.peek().kind),
     }
   }
 
   ///Returns an [`Expression`] consisting of the currently parsed [`Token`]s
   /// and the next `Token`.
   fn parse_expression_left_denotation(&mut self, left:Expression,) -> Expression {
+    let loc = left.loc;
     match self.peek().kind {
-      //BinOps
+      // BinOps
       TokenKind::MINUS
       | TokenKind::PLUS
       | TokenKind::STAR
@@ -185,11 +195,25 @@ impl Parser {
       | TokenKind::GREATER_EQUAL
       | TokenKind::LESS
       | TokenKind::LESS_EQUAL => {
-        let loc = left.loc;
         let token = self.next();
         let binop_kind = BinOpKind::from(token,);
         let right = self.parse_expression(token.lbp(),);
         let kind = ExpressionKind::BinOp(P::new(left,), binop_kind, P::new(right,),);
+        Expression { id:0, kind, loc, }
+      }
+      // Assignment
+      TokenKind::EQUAL => {
+        let token = self.next();
+        let right = self.parse_expression(token.lbp(),);
+        let kind = ExpressionKind::Assign(P::new(left,), P::new(right,),);
+        Expression { id:0, kind, loc, }
+      }
+      // AssignOps
+      TokenKind::STAR_EQUAL | TokenKind::SLASH_EQUAL | TokenKind::PLUS_EQUAL | TokenKind::MINUS_EQUAL => {
+        let token = self.next();
+        let assignop_kind = AssignOpKind::from(token,);
+        let right = self.parse_expression(token.lbp(),);
+        let kind = ExpressionKind::AssignOp(P::new(left,), assignop_kind, P::new(right,),);
         Expression { id:0, kind, loc, }
       }
       _ => {
@@ -199,58 +223,38 @@ impl Parser {
     }
   }
 
-  ///Return an expression containing an integer [`Literal`].
-  fn parse_integer(&mut self,) -> Expression {
+  ///Return an expression containing a [`Literal`].
+  fn parse_literal(&mut self,) -> Expression {
     let token = self.next();
-    if let TokenKind::INT(idx,) = token.kind {
-      let val = Literal {
+    let val = match token.kind {
+      TokenKind::INT(idx,) => Literal {
         kind:LiteralKind::Integer,
         symbol:Symbol { idx, },
-      };
-
-      Expression {
-        id:0,
-        kind:ExpressionKind::Literal(P::new(val,),),
-        loc:token.loc,
-      }
-    }
-    else {
-      unreachable!()
-    }
-  }
-
-  ///Return an expression containing a float [`Literal`].
-  fn parse_float(&mut self,) -> Expression {
-    let token = self.next();
-    if let TokenKind::FLOAT(idx,) = token.kind {
-      let val = Literal {
+      },
+      TokenKind::FLOAT(idx,) => Literal {
         kind:LiteralKind::Float,
         symbol:Symbol { idx, },
-      };
+      },
+      TokenKind::BOOL(idx,) => Literal {
+        kind:LiteralKind::Bool,
+        symbol:Symbol { idx, },
+      },
+      _ => unreachable!(),
+    };
 
-      Expression {
-        id:0,
-        kind:ExpressionKind::Literal(P::new(val,),),
-        loc:token.loc,
-      }
-    }
-    else {
-      unreachable!()
+    Expression {
+      id:0,
+      kind:ExpressionKind::Literal(P::new(val,),),
+      loc:token.loc,
     }
   }
 
-  ///Return an expression containing a boolean [`Literal`].
-  fn parse_bool(&mut self,) -> Expression {
+  fn parse_ident_expression(&mut self,) -> Expression {
     let token = self.next();
-    if let TokenKind::BOOL(idx,) = token.kind {
-      let val = Literal {
-        kind:LiteralKind::Bool,
-        symbol:Symbol { idx, },
-      };
-
+    if let TokenKind::IDENTIFIER(idx,) = token.kind {
       Expression {
         id:0,
-        kind:ExpressionKind::Literal(P::new(val,),),
+        kind:ExpressionKind::Ident(Symbol { idx, },),
         loc:token.loc,
       }
     }
@@ -335,15 +339,6 @@ impl Parser {
     Statement::new(loc, stmt_kind,)
   }
 
-  ///Parse an [`Expression`] as a [`Statement`].
-  fn parse_expression_statement(&mut self,) -> Statement {
-    Statement {
-      id:0,
-      loc:self.peek().loc,
-      kind:StatementKind::Expression(self.parse_expression(0,),),
-    }
-  }
-
   ///Checks if the next [`Token`] is mutable and consumes it if so.
   fn parse_mutability(&mut self,) -> bool {
     self.eat_token_if_match(TokenKind::MUT,)
@@ -379,7 +374,7 @@ impl Parser {
       Ident { name:idx, loc:token.loc, }
     }
     else {
-      panic!("This should not be reachable!")
+      unreachable!()
     }
   }
 
@@ -387,14 +382,38 @@ impl Parser {
     // If equals sign, parse the output of the next statement, expect an Expression.
     if self.eat_token_if_match(TokenKind::EQUAL,) {
       let expression = self.parse_expression(0,);
-      //Line must end after the expression so expect a semicolon
-      self.eat_token_expect(TokenKind::SEMICOLON, "Must end Let statement with a semicolon",).unwrap();
       return LocalKind::Init(P::new(expression,),);
     }
-    // If equals no sign error it's a delayed assignment so expect a semicolon
-    self.eat_token_expect(TokenKind::SEMICOLON, "Must end Let statement with a semicolon",).unwrap();
 
     LocalKind::Decl
+  }
+
+  fn parse_array_expression(&mut self,) -> Expression {
+    todo!()
+  }
+
+  fn parse_tuple_expression(&mut self,) -> Expression {
+    let token = self.next();
+
+    let mut elements = Vec::new();
+
+    // parse an expression until a comma is encountered then push it to the
+    // elements vec end when a ] is encountered
+    while self.peek().kind != TokenKind::RIGHT_PAREN {
+      elements.push(P::new(self.parse_expression(0,),),);
+      // Skip over the comma
+      self.eat_token_if_match(TokenKind::COMMA,);
+    }
+
+    // Error if the array is not closed
+    self.eat_token_expect(TokenKind::RIGHT_PAREN, "Must close the array.",).unwrap();
+
+    //Return the expression
+    Expression {
+      id:0,
+      kind:ExpressionKind::Tuple(elements,),
+      loc:token.loc,
+    }
   }
 }
 
@@ -460,33 +479,54 @@ mod tests {
 
   #[test]
   fn parse_works() {
-    // Add rebinding identifiers
+    // C:\Users\Jamari\.cargo\bin\cargo.exe 'test', '--package', 'galaxy-compiler',
+    // '--bin', 'galaxy-compiler', '--', 'parser::tests::parse_works', '--exact',
+    // '--show-output' '--nocapture'
+
+    // Add tuples
     // Add loops
-    // Add arrays
     // Add function calls
+    // Add returns to if statements and loops
+    // Add arrays
+    // - Unclear if I want to do this in the compiler or in the std or something
     // Add back the error checking for the AST
+    // - Eat token expect is not working
+    // - Correct statement erroring so expression-statements do not require
+    //   semicolons
+    // - Erroring if tuples are not closed
 
-    // basically just an expression that takes an identifier then does parse local
-    // kind
-    // rework let expressions to use the assgin expr assign takes an expr because it
-    // sometimes allows for setting a tuple to an output
+    // Switch how equal is handled here?
 
-    // How do if expressions return?
+    // https://craftinginterpreters.com/global-variables.html#assignment
+    // To fix this, variable() should look for and consume the = only if it’s in the
+    // context of a low-precedence expression. The code that knows the current
+    // precedence is, logically enough, parsePrecedence(). The variable() function
+    // doesn’t need to know the actual level. It just cares that the precedence is
+    // low enough to allow assignment, so we pass that fact in as a Boolean.
 
     let source = r#"
     //Check the binops work with nums
-    let mut value_test = 5 + 6 * 7 / 8;
+    // let mut value_test = 5 + 6 * 7 / 8;
 
-    //Check the bdinops work with boolean statements
-    let value = true != false == true;
+    //Check the binops work with boolean statements
+    // let value = true != false == true;
     
     //Check if expressions work
-    let test = if true != false {
-      let a = 90;
-    }
-    else {
-      let a = 50;
-    };
+    // let test = if true != false {
+    //   let a = 90;
+    // }
+    // else {
+    //   let a = 50;
+    // };
+    
+    // Check assignment works
+    // value_test = 5;
+
+    // value_test += 5;
+
+    // Does not parse if the numbers are connected to commas
+    // Causes a stack overlow - run with nocapture
+    let value_2 = (2 + 19,6,1);
   "#;
 
     let mut parser = Parser::new(source,);

@@ -106,17 +106,55 @@ impl Display for BinOpKind {
 impl From<Token,> for BinOpKind {
   fn from(token:Token,) -> Self {
     match token.kind {
-      TokenKind::MINUS => BinOpKind::MINUS,
-      TokenKind::PLUS => BinOpKind::PLUS,
-      TokenKind::SLASH => BinOpKind::SLASH,
       TokenKind::STAR => BinOpKind::STAR,
+      TokenKind::SLASH => BinOpKind::SLASH,
+      TokenKind::PLUS => BinOpKind::PLUS,
+      TokenKind::MINUS => BinOpKind::MINUS,
       TokenKind::EQUAL_EQUAL => BinOpKind::EQUAL_EQUAL,
       TokenKind::NOT_EQUAL => BinOpKind::NOT_EQUAL,
       TokenKind::GREATER => BinOpKind::GREATER,
       TokenKind::GREATER_EQUAL => BinOpKind::GREATER_EQUAL,
       TokenKind::LESS => BinOpKind::LESS,
       TokenKind::LESS_EQUAL => BinOpKind::LESS_EQUAL,
-      _ => todo!(),
+      _ => unreachable!("Cannot create a BinOpKind from {:?}", token.kind),
+    }
+  }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Clone, PartialEq, Eq,)]
+pub enum AssignOpKind {
+  STAR_EQUAL,
+  SLASH_EQUAL,
+  PLUS_EQUAL,
+  MINUS_EQUAL,
+}
+
+impl From<Token,> for AssignOpKind {
+  fn from(token:Token,) -> Self {
+    match token.kind {
+      TokenKind::STAR_EQUAL => AssignOpKind::STAR_EQUAL,
+      TokenKind::SLASH_EQUAL => AssignOpKind::SLASH_EQUAL,
+      TokenKind::PLUS_EQUAL => AssignOpKind::PLUS_EQUAL,
+      TokenKind::MINUS_EQUAL => AssignOpKind::MINUS_EQUAL,
+      _ => unreachable!("Cannot create a AssignOpKind from {:?}", token.kind),
+    }
+  }
+}
+
+impl Debug for AssignOpKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    Display::fmt(&self, f,)
+  }
+}
+
+impl Display for AssignOpKind {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    match self {
+      AssignOpKind::STAR_EQUAL => write!(f, "*="),
+      AssignOpKind::SLASH_EQUAL => write!(f, "/="),
+      AssignOpKind::PLUS_EQUAL => write!(f, "+="),
+      AssignOpKind::MINUS_EQUAL => write!(f, "-="),
     }
   }
 }
@@ -130,21 +168,24 @@ pub struct Literal {
 #[derive(Clone,)]
 pub enum ExpressionKind {
   Literal(P<Literal,>,),
-  ///A binary operation i.e.`true == false`
+  ///A binary operation (e.g.`true == false`).
   BinOp(P<Expression,>, BinOpKind, P<Expression,>,),
-  /// An `if` block, with an optional `else` block.
-  ///
-  /// `if expr { Vec<Statement> } else { expr }`
+  /// An `if` block, with an optional `else` block (e.g. `if expr {
+  /// Vec<Statement> } else { expr }`).
   If(P<Expression,>, P<Vec<Statement,>,>, Option<P<Vec<Statement,>,>,>,),
-  //     /// An assignment (`a = foo()`).
-  //     /// The `Span` argument is the span of the `=` token.
-  //     Assign(P<Expr>, P<Expr>, Span),
-  //     /// An assignment with an operator.
-  //     ///
-  //     /// E.g., `a += 1`.
-  //     AssignOp(BinOp, P<Expr>, P<Expr>),
+  /// Variable reference.
+  Ident(Symbol,),
+  /// An assignment (`a = foo()`) .
+  Assign(P<Expression,>, P<Expression,>,),
+  /// An assignment with an operator (e.g.`a += 1`).
+  AssignOp(P<Expression,>, AssignOpKind, P<Expression,>,),
+  // /// An array (e.g, `[a, b, c, d]`).
+  // Array(Vec<P<Expression,>,>,),
+  // /// An array (e.g, `[a, b, c, d]`).
+  // Array(Vec<P<Expression,>,>,),
+  /// A tuple (e.g., `(a, b, c, d)`).
+  Tuple(Vec<P<Expression,>,>,),
   // Call,
-  // Array
 }
 
 impl Debug for ExpressionKind {
@@ -158,6 +199,10 @@ impl Display for ExpressionKind {
     match self {
       Self::Literal(lit,) => write!(f, "LITERAL({})", lookup(lit.symbol.idx),),
       Self::BinOp(left, op, right,) => write!(f, "BINOP({} {:?} {})", left.kind, op, right.kind),
+      Self::Ident(sym,) => write!(f, "IDENT({})", lookup(sym.idx)),
+      Self::Assign(left, right,) => write!(f, "ASSIGN({} = {})", left.kind, right.kind),
+      Self::AssignOp(left, op, right,) => write!(f, "ASSIGN({} {} {})", left.kind, op, right.kind),
+      Self::Tuple(elements,) => write!(f, "TUPLE({:?})", elements),
       _ => panic!(),
     }
   }
@@ -262,8 +307,8 @@ pub struct Local {
 #[derive(Debug, Clone,)]
 pub enum StatementKind {
   Let(P<Local,>,),
-  Item(),
   Expression(Expression,),
+  // Item(),
 }
 
 #[derive(Debug, Clone,)]
@@ -313,8 +358,7 @@ impl AbstractSyntaxTree {
 
 // #[derive(Clone, Encodable, Decodable, Debug)]
 // pub enum ExprKind {
-//     /// An array (e.g, `[a, b, c, d]`).
-//     Array(ThinVec<P<Expr>>),
+
 //     /// Allow anonymous constants from an inline `const` block
 //     ConstBlock(AnonConst),
 //     /// A function call
