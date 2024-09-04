@@ -16,7 +16,7 @@ pub enum ParsingError {
   VarNotDeclared,
   #[error("{0:?} is not a valid variable name. Variable names must begin with a letter")]
   InvalidVarName(String,),
-  #[error("Unexpected token. {expected:?} is not {recieved:?}")]
+  #[error("Unexpected token. {recieved:?} is not {expected:?}")]
   UnexpectedToken { expected:TokenKind, recieved:TokenKind, },
   #[error("{0:?} is not a valid type. Accepted types are int, float, usize, and str or their corresponding arrays int[], float[], usize[], and str[]")]
   InvalidType(String,),

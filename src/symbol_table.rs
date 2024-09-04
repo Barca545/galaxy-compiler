@@ -1,68 +1,161 @@
-use std::{collections::HashMap, mem::size_of};
+use crate::interner::lookup;
+use std::collections::HashMap;
+use std::fmt::Debug;
+// Refactor:
+// - Might need functionality to roll back current when traversing the tables
+//   "graph"
+// - Consider changing the interface so I never interact with the children
+//   tables directly and only go through the parent. Will depend on how the
+//   tables are actually used.
+// - Rename the "graph" holding all the tables. SymbolTables is too close to
+//   SymbolTable.
 
-//should data type be shared with the parser
-//Symbol should be a u32 maybe make it an struct in the Interner
+// TODO
+// - I do not think the types here and in the AST should not be different.
 
-// struct SymbolTable{
-//   //a normal Rc instead of a Weak might be fine here.
-//    parent:Option<Weak<SymbolTable>>,
-//    //the u32 is an index into my string interner
-//    table: HashMap<u32, SymbolData>
-//  }
+///A graph-like structure which holds all of the apps [`SymbolTable`]s.
+struct SymbolTables {
+  tables:Vec<SymbolTable,>,
+  current:usize,
+}
 
-//  struct SymbolData{
-//    ty: Option<Ty>,
-//    //The register it is allocated
-//    reg: Option<usize>,
-//    children:Vec<SymbolTable>
-//  }
+impl SymbolTables {
+  pub fn new() -> SymbolTables {
+    SymbolTables {
+      tables:vec![SymbolTable::new(None, 0,)],
+      current:0,
+    }
+  }
 
-//  impl SymbolTable{
-//    fn lookup(&self, name:u32) -> Option<SymbolData> {
-//      match self.table.get(name){
-//        //might be a more elegant way to do this
-//        Some(sym) => Some(sym),
-//        None => self.parent.lookup(name)
-//      }
-//    }
-//  }
+  ///Create and add a new child scope and its [`SymbolTable`].
+  pub fn new_scope(&mut self,) -> &mut SymbolTable {
+    self.tables.push(SymbolTable::new(Some(self.current,), self.current,),);
+    self.current = self.tables.len() - 1;
+    self.current_mut()
+  }
 
-enum SymanticType {}
+  ///Returns a reference to the parent of the current [`SymbolTable`].
+  pub fn parent(&self,) -> &SymbolTable {
+    match &self.tables[self.current].parent {
+      Some(parent,) => &self.tables[*parent],
+      None => panic!("root has no parent"),
+    }
+  }
 
-enum DataType {
+  ///Return a refrence to the current [`SymbolTable`].
+  pub fn current(&self,) -> &SymbolTable {
+    &self.tables[self.current]
+  }
+
+  ///Return a mutable refrence to the current [`SymbolTable`].
+  pub fn current_mut(&mut self,) -> &mut SymbolTable {
+    &mut self.tables[self.current]
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq,)]
+pub enum DataType {
   Int,
   Float,
   Usize,
 }
-#[derive(Debug, Clone,)]
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash,)]
 pub struct Symbol {
   pub idx:u32,
 }
 
-struct AttributeTable {}
+impl Debug for Symbol {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    f.debug_struct("Symbol",).field("value", &lookup(self.idx,),).finish()
+  }
+}
+
+impl From<u32,> for Symbol {
+  fn from(idx:u32,) -> Self {
+    Symbol { idx, }
+  }
+}
+
+#[derive(Debug, Clone, Copy,)]
+pub struct SymbolData {
+  data_type:DataType,
+}
+impl SymbolData {
+  pub fn new(data_type:DataType,) -> SymbolData {
+    SymbolData { data_type, }
+  }
+}
 
 struct SymbolTable {
-  hashtable:HashMap<u32, Symbol,>,
+  idx:usize,
+  attribute_table:HashMap<Symbol, SymbolData,>,
+  parent:Option<usize,>,
 }
 
 impl SymbolTable {
-  fn hash(&self, string:String,) -> u32 {
-    let len = string.len();
-    let num_shifts = len.min(8 * size_of::<u32,>() - 8,);
-    let start_char = (len - num_shifts) % 2;
-
-    let mut code = 0;
-    for i in start_char..start_char + num_shifts {
-      code = (code << 1) + string.chars().nth(i,).unwrap() as u32;
+  pub fn new(parent:Option<usize,>, idx:usize,) -> Self {
+    SymbolTable {
+      attribute_table:HashMap::new(),
+      parent,
+      idx,
     }
-    code % self.hashtable.len() as u32
   }
 
-  //insert checks if a key is already in and errors saying can't reuse names
+  pub fn set(&mut self, sym:Symbol, data:SymbolData,) {
+    self.attribute_table.insert(sym, data,);
+  }
+
+  ///Returns the [`SymbolTable`]'s parent.
+  fn parent<'p,>(&self, tables:&'p SymbolTables,) -> &'p SymbolTable {
+    match self.parent {
+      Some(parent_idx,) => &tables.tables[parent_idx],
+      None => panic!("Node {} has no parents.", self.idx),
+    }
+  }
+
+  ///Get a [`Symbol`]'s information.
+  pub fn get(&self, sym:&Symbol, tables:&SymbolTables,) -> SymbolData {
+    match self.attribute_table.get(sym,) {
+      Some(data,) => *data,
+      None => {
+        let parent = self.parent(tables,);
+        match parent.attribute_table.get(sym,) {
+          Some(data,) => *data,
+          None => parent.parent(tables,).get(sym, tables,),
+        }
+      }
+    }
+  }
 }
 
 #[cfg(test)]
 mod tests {
+  use super::{Symbol, SymbolData, SymbolTables};
+  use crate::{interner::intern, symbol_table::DataType};
+
   #[test]
-  fn hash_works() {}
+  fn create_update_table() {
+    let mut tables = SymbolTables::new();
+    let table = tables.current_mut();
+
+    let sym = Symbol::from(intern("test",),);
+    let data = SymbolData::new(DataType::Usize,);
+
+    table.set(sym, data,);
+
+    let test_table = &tables.tables[0];
+    let test_data = test_table.get(&sym, &tables,);
+
+    assert_eq!(test_data.data_type, DataType::Usize);
+  }
+
+  #[test]
+  fn create_child_scopes() {
+    //Create a new scope
+
+    //Create multiple children inside the scope with different attribute tables
+
+    //Create a deeply nested scope and call get on something in the root scope
+  }
 }

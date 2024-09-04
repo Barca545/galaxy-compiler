@@ -1,41 +1,27 @@
-use crate::interner::lookup;
-
 use super::{
   symbol_table::Symbol,
   token::{Location, Token, TokenKind},
 };
+use crate::interner::lookup;
 use std::{
   fmt::{Debug, Display},
   ops::Deref,
 };
 
-// Convert the Strings into u32s
-
-//I think the AST also has to do with the symbol table
-
-// #[derive(Debug,)]
-// pub struct FunctionCall;
-
-// #[derive(Debug,)]
-// pub struct FunctionDeclaration;
-
-// #[derive(Debug,)]
-// pub struct If;
-
-// #[derive(Debug,)]
-// pub struct While;
-
-// #[derive(Debug,)]
-// pub struct For;
-
-// #[derive(Debug,)]
-// pub struct Binary;
-
-// #[derive(Debug,)]
-// pub struct Declaration;
+// Refactor:
+// - Add location info to the block
+// - Rename `Pat` pattern?
+// - Do the blocks needs idx (indices) and stuff?
 
 // #[derive(Debug,)]
 // pub struct Return;
+
+#[derive(Debug, Clone,)]
+pub struct RawIdent {
+  pub symbol:Symbol,
+  pub mutable:bool,
+  pub loc:Location,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq,)]
 ///Owned smart pointer on the heap.
@@ -78,6 +64,8 @@ pub enum BinOpKind {
   GREATER_EQUAL,
   LESS,
   LESS_EQUAL,
+  // AND,
+  // OR
 }
 
 impl Debug for BinOpKind {
@@ -165,6 +153,12 @@ pub struct Literal {
   pub symbol:Symbol,
 }
 
+#[derive(Debug, Clone,)]
+pub struct Block {
+  pub inner_block:Vec<Statement,>,
+  // loc:Location,
+}
+
 #[derive(Clone,)]
 pub enum ExpressionKind {
   Literal(P<Literal,>,),
@@ -172,9 +166,9 @@ pub enum ExpressionKind {
   BinOp(P<Expression,>, BinOpKind, P<Expression,>,),
   /// An `if` block, with an optional `else` block (e.g. `if expr {
   /// Vec<Statement> } else { expr }`).
-  If(P<Expression,>, P<Vec<Statement,>,>, Option<P<Vec<Statement,>,>,>,),
+  If(P<Expression,>, P<Block,>, Option<P<Block,>,>,),
   /// Variable reference.
-  Ident(Symbol,),
+  Ident(RawIdent,),
   /// An assignment (`a = foo()`) .
   Assign(P<Expression,>, P<Expression,>,),
   /// An assignment with an operator (e.g.`a += 1`).
@@ -185,6 +179,25 @@ pub enum ExpressionKind {
   // Array(Vec<P<Expression,>,>,),
   /// A tuple (e.g., `(a, b, c, d)`).
   Tuple(Vec<P<Expression,>,>,),
+  /// A while loop, with an optional label.
+  WhileLoop(P<Expression,>, P<Block,>,),
+  /// A `for` loop.
+  ///
+  /// A for expression extracts values from an iterator, looping until the
+  /// iterator is empty This is desugared to a combination of `loop` and
+  /// `match` expressions (e.g. `for <pat> in <expr> <block>`). ()
+  ForLoop {
+    pat:P<Pat,>,
+    iter:P<Expression,>,
+    body:P<Block,>,
+  },
+  Range {
+    left:P<Expression,>,
+    inclusive:bool,
+    right:P<Expression,>,
+  },
+  Break,
+  Continue,
   // Call,
 }
 
@@ -199,11 +212,22 @@ impl Display for ExpressionKind {
     match self {
       Self::Literal(lit,) => write!(f, "LITERAL({})", lookup(lit.symbol.idx),),
       Self::BinOp(left, op, right,) => write!(f, "BINOP({} {:?} {})", left.kind, op, right.kind),
-      Self::Ident(sym,) => write!(f, "IDENT({})", lookup(sym.idx)),
+      Self::Ident(ident,) => write!(f, "IDENT({})", lookup(ident.symbol.idx)),
       Self::Assign(left, right,) => write!(f, "ASSIGN({} = {})", left.kind, right.kind),
       Self::AssignOp(left, op, right,) => write!(f, "ASSIGN({} {} {})", left.kind, op, right.kind),
       Self::Tuple(elements,) => write!(f, "TUPLE({:?})", elements),
-      _ => panic!(),
+      Self::If(con, _, _,) => write!(f, "IF({})", con.kind),
+      Self::WhileLoop(con, _,) => write!(f, "WHILE({}{{BLOCK PRINTING UNIMPLEMENTED}})", con.ptr.kind,),
+      Self::ForLoop { pat, iter, body, } => todo!(),
+      Self::Range { left, inclusive, right, } => {
+        let range = match inclusive {
+          true => "..=",
+          false => "..",
+        };
+        write!(f, "RANGE({:?}{}{:?})", left.ptr.kind, range, right.ptr.kind)
+      }
+      Self::Break => write!(f, "BREAK"),
+      Self::Continue => write!(f, "CONTINUE"),
     }
   }
 }
@@ -267,14 +291,14 @@ impl Ty {
 }
 
 #[derive(Debug, Clone,)]
-pub struct Ident {
-  pub name:u32,
-  pub loc:Location,
-}
-
-#[derive(Debug, Clone,)]
 pub enum PatKind {
-  Ident { mutable:bool, ident:Ident, },
+  Ident(RawIdent,),
+  Range {
+    start:P<Expression,>,
+    end:P<Expression,>,
+    inclusive:bool,
+  },
+  Tuple(P<Vec<Pat,>,>,),
 }
 
 #[derive(Debug, Clone,)]
@@ -325,12 +349,6 @@ impl Statement {
   }
 }
 
-// #[derive(Debug,)]
-// struct Node {
-//   pub id:usize,
-//   pub statement:Statement,
-// }
-
 #[derive(Debug,)]
 pub struct AbstractSyntaxTree {
   pub statements:Vec<Statement,>,
@@ -346,6 +364,27 @@ impl AbstractSyntaxTree {
     self.statements.push(statement,);
   }
 }
+
+// pub enum PatKind {
+//   Wild,
+//   Ident(BindingMode, Ident, Option<P<Pat>>),
+//   Struct(Option<P<QSelf>>, Path, ThinVec<PatField>, PatFieldsRest),
+//   TupleStruct(Option<P<QSelf>>, Path, ThinVec<P<Pat>>),
+//   Or(ThinVec<P<Pat>>),
+//   Path(Option<P<QSelf>>, Path),
+//   Tuple(ThinVec<P<Pat>>),
+//   Box(P<Pat>),
+//   Deref(P<Pat>),
+//   Ref(P<Pat>, Mutability),
+//   Lit(P<Expr>),
+//   Range(Option<P<Expr>>, Option<P<Expr>>, Spanned<RangeEnd>),
+//   Slice(ThinVec<P<Pat>>),
+//   Rest,
+//   Never,
+//   Paren(P<Pat>),
+//   MacCall(P<MacCall>),
+//   Err(ErrorGuaranteed),
+// }
 
 // #[derive(Clone, Encodable, Decodable, Debug)]
 // pub struct Expr {

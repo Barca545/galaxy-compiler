@@ -74,13 +74,11 @@ impl Tokenizer {
   }
 
   fn eat_comment(&mut self,) {
-    if *self.source.peek().unwrap() == '/' {
-      while let Some(ch,) = self.source.peek() {
-        if *ch == '\n' {
-          break;
-        }
-        self.next();
+    while let Some(ch,) = self.source.peek() {
+      if *ch == '\n' {
+        break;
       }
+      self.next();
     }
   }
 
@@ -103,7 +101,15 @@ impl Tokenizer {
     while let Some(ch,) = self.next() {
       match ch {
         // The following block controls "reading" comments
-        '/' => self.eat_comment(),
+        '/' => {
+          if *self.source.peek().unwrap() == '/' {
+            self.eat_comment()
+          }
+          //If not a comment just push
+          else {
+            self.current.push(ch,)
+          }
+        }
         // The following block controls "reading" strings
         '\"' => self.read_string(),
         ' ' | '\n' | '\r' | '\t' => {
@@ -124,7 +130,13 @@ impl Tokenizer {
           if self.current.len() > 0 {
             self.tokens.push(self.current.to_token(),);
           }
+
           self.current.push(ch,);
+          //Check for a not equal
+          if ch == '!' && Some(&'=',) == self.source.peek() {
+            let ch = self.next().unwrap();
+            self.current.push(ch,);
+          }
           self.tokens.push(self.current.to_token(),);
         }
         '.' => {
