@@ -1,235 +1,188 @@
 use super::token::{Chunk, Token};
-use crate::{interner::intern, token::TokenKind};
+use crate::token::Location;
 use std::{iter::Peekable, vec::IntoIter};
 
 // Refactor:
+// - For the is_comment check, see if there is a way to just make the tokenizer
+//   eat and discard the comment stuff without
 // - Add catching types to the filter pass and move it out of the token
 //   formation. This will make it easier to add types later if desired.
 // - I think I need to rework how chunks work/remove them from the tokenizer.
 // - Create a read_string function that just reads a full string and then
 //   interns it before returning that for the string literals to use
 // - Fix errors to pretty print
-// - Key might need to be "Symbol"
-// - Number tokenization really needs to be redone
+// - Add the len > 0 check into the chunk to token somehow
+// - Add multiline comments
+// - Consider making the next function part of push[ing] a ch to the chunk
+// - Do I need the length checks?
+// - Fix eating whitespace
 
 pub type TokenStream = Vec<Token,>;
 
-pub fn tokenize(source:&str,) -> TokenStream {
-  let mut tokens = Vec::new();
-  let mut chunk = Chunk::new();
-  let mut is_comment = false;
+pub struct Tokenizer {
+  source:Peekable<IntoIter<char,>,>,
+  ///Current [`Chunk`].
+  current:Chunk,
+  ///[`TokenStream`] to return.
+  tokens:TokenStream,
+  /// Current [`Location`] in the source file.
+  loc:Location,
+}
 
-  // let mut chars =
-  // source.chars().collect::<Vec<char,>>().into_iter().peekable();
-
-  // while chars.peek().is_some() {
-  //   let ch = chars.next().unwrap();
-
-  //   // This block identifies a comment has begun
-  //   if ch == '/' && *chars.peek().unwrap() == '/' {
-  //     eat_comment(&mut chars,);
-  //     continue;
-  //   }
-
-  //   match ch {
-  //     '\"' => {
-  //       let str = read_string(&mut chars,);
-  //       for ch in str.chars() {
-  //         chunk.push(ch,)
-  //       }
-  //       tokens.push(chunk.to_token(),)
-  //     }
-  //     ' ' | '\r' | '\t' => {
-  //       if chunk.len() > 0 {
-  //         tokens.push(chunk.to_token(),)
-  //       }
-  //     }
-  //     '\n' => {
-  //       if chunk.len() > 0 {
-  //         tokens.push(chunk.to_token(),);
-  //       }
-  //       chunk.newline = true;
-  //     }
-  //     ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
-  //       if chunk.len() > 0 {
-  //         tokens.push(chunk.to_token(),);
-  //       }
-  //       tokens.push(chunk.new_token(ch.to_string(),),);
-  //     }
-  //     '1'..='9' => {
-  //       let mut num = String::from(ch,);
-  //       loop {
-  //         let c = chars.peek().unwrap();
-  //         let t = format!("{num}{c}");
-  //         if t.parse::<f32>().is_ok() || t.parse::<u32>().is_ok() {
-  //           num.push(chars.next().unwrap(),);
-  //         }
-  //         else {
-  //           break;
-  //         }
-  //       }
-  //     }
-  //     _ => chunk.push(ch,),
-  //   }
-
-  //   chunk.next()
-  // }
-
-  let chars = source.chars().collect::<Vec<char,>>();
-
-  for i in 0..chars.len() {
-    let ch = chars[i];
-
-    // The following 2 blocks control reading comments
-
-    // This block identifies a comment has begun
-    if ch == '/' && chars[i + 1] == '/' {
-      is_comment = true;
+impl Tokenizer {
+  pub fn new() -> Self {
+    Tokenizer {
+      source:"".chars().collect::<Vec<char,>>().into_iter().peekable(),
+      current:Chunk::new(),
+      tokens:Vec::new(),
+      loc:Location::new(),
     }
+  }
 
-    // This block identifies a comment has ended
-    if is_comment && ch == '\n' {
-      is_comment = false;
-    }
+  ///Increment the [`Tokenizer`]'s [`Location`].
+  fn next(&mut self,) -> Option<char,> {
+    let next = self.source.next();
+    let newline = if next == Some('\n',) { true } else { false };
+    self.loc.next(newline,);
+    // dbg!(next.unwrap());
+    next
+  }
 
-    if !is_comment {
-      match ch {
-        '\"' => {
-          if chunk.is_string {
-            chunk.push('\"',);
-            tokens.push(chunk.to_token(),)
-          }
-          else {
-            chunk.push('\"',)
-          }
-          chunk.is_string = !chunk.is_string;
-        }
-        ' ' | '\r' | '\t' => {
-          if chunk.is_string {
-            chunk.push(ch,);
-          }
-          else if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),)
-          }
-        }
-        '\n' => {
-          if chunk.is_string {
-            chunk.push(ch,);
-          }
-          else if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          chunk.newline = true;
-        }
-        ',' | ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
-          if chunk.len() > 0 {
-            tokens.push(chunk.to_token(),);
-          }
-          tokens.push(chunk.new_token(ch.to_string(),),);
-        }
-        _ => chunk.push(ch,),
+  fn eat_whitespace(&mut self,) {
+    // while let Some(ch,) = self.source.peek() {
+    //   if !ch.is_whitespace() {
+    //     break;
+    //   }
+    //   self.next();
+    // }
+    while let Some(ch,) = self.next() {
+      if !ch.is_whitespace() {
+        break;
       }
     }
-    chunk.next()
-  }
-  //Add the EOF token
-  tokens.push(Token::new(None, chunk.loc(),),);
-
-  tokens
-}
-
-/// Reads a string from the source code, interns it and returns its key.
-fn read_string(chars:&mut Peekable<IntoIter<char,>,>,) -> String {
-  let mut str = String::from("\"",);
-
-  // Push chars to the string
-  while chars.peek().is_some() {
-    let ch = chars.next().unwrap();
-    if ch != '\"' {
-      str.push(ch,)
-    }
-    else {
-      str.push(ch,);
-      break;
-    }
   }
 
-  // Confirm the string ends with a \"
-  if str.ends_with(|ch| ch != '\"',) {
-    panic!("Tokenizing Error: Must terminate string with \".")
+  ///Turn the current [`Chunk`] into a [`Token`]. Add it to the [`TokenStream`]
+  /// and ready a new [`Chunk`].
+  fn new_chunk(&mut self, ch:char,) {
+    // Set the new Token's location
+    if self.current.len() == 0 {
+      self.current.start.col = self.loc.col - 1;
+      self.current.start.line = self.loc.line;
+    }
+    self.current.push(ch,);
   }
 
-  str
-}
-
-/// Eats a comment from the source code.
-fn eat_comment(chars:&mut Peekable<IntoIter<char,>,>,) {
-  // Push chars to the string
-  while chars.peek().is_some() {
-    let ch = chars.next().unwrap();
-    if ch == '\n' {
-      break;
+  fn eat_comment(&mut self,) {
+    if *self.source.peek().unwrap() == '/' {
+      while let Some(ch,) = self.source.peek() {
+        if *ch == '\n' {
+          break;
+        }
+        self.next();
+      }
     }
+  }
+
+  fn read_string(&mut self,) {
+    self.new_chunk('\"',);
+    while let Some(ch,) = self.source.next() {
+      //Append to chunk
+      self.current.push(ch,);
+      if ch == '\"' {
+        self.tokens.push(self.current.to_token(),);
+        break;
+      }
+    }
+  }
+
+  pub fn tokenize(&mut self, source:&str,) -> TokenStream {
+    //Plug in the incoming source file
+    self.source = source.chars().collect::<Vec<char,>>().into_iter().peekable();
+
+    while let Some(ch,) = self.next() {
+      match ch {
+        // The following block controls "reading" comments
+        '/' => self.eat_comment(),
+        // The following block controls "reading" strings
+        '\"' => self.read_string(),
+        ' ' | '\n' | '\r' | '\t' => {
+          if self.current.len() > 0 {
+            self.tokens.push(self.current.to_token(),)
+          }
+          // self.eat_whitespace()
+        }
+        ',' | ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
+          if self.current.len() > 0 {
+            self.tokens.push(self.current.to_token(),);
+          }
+          self.new_chunk(ch,);
+          self.tokens.push(self.current.to_token(),);
+        }
+        // Handle unary operators
+        '!' | '-' => {
+          if self.current.len() > 0 {
+            self.tokens.push(self.current.to_token(),);
+          }
+          self.current.push(ch,);
+          self.tokens.push(self.current.to_token(),);
+        }
+        '.' => {
+          // Break tokenizing when it encounters a ".."
+          // Check if it encounters a period outside a comment if the next char is
+          // a period and if it a period tokenize the old chunk, then make a new chunk
+          if *self.source.peek().unwrap() == '.' {
+            // Tokenize the current chunk and start a new one
+            if self.current.len() > 0 {
+              self.tokens.push(self.current.to_token(),);
+            }
+            if self.current.len() == 0 {
+              self.current.start.col = self.loc.col - 1;
+              self.current.start.line = self.loc.line;
+            }
+            self.current.push(ch,);
+            let next = self.next().unwrap();
+            self.current.push(next,);
+
+            if *self.source.peek().unwrap() == '=' {
+              let next = self.next().unwrap();
+              self.current.push(next,);
+            }
+            self.tokens.push(self.current.to_token(),);
+          }
+          else {
+            self.current.push(ch,);
+          }
+        }
+        _ => self.new_chunk(ch,),
+      }
+    }
+    //Add the EOF token
+    self.tokens.push(Token::new(None, self.loc,),);
+
+    self.tokens.clone()
   }
 }
 
 #[cfg(test)]
 mod test {
-  use super::tokenize;
-  use crate::{interner::lookup, token::TokenKind};
+  use crate::{
+    interner::lookup,
+    symbol_table::Symbol,
+    token::{Token, TokenKind},
+    tokenizer::Tokenizer,
+  };
+  use std::fs;
 
-  #[test]
-  fn tokenize_number() {
-    let source = "223.5+9*=15.5";
-    let mut chars = source.chars().enumerate().collect::<Vec<(usize, char,),>>().into_iter().peekable();
-
-    let mut tokens = Vec::new();
-    while chars.peek().is_some() {
-      let ch = chars.next().unwrap().1;
-      // this is the actual code
-
-      match ch {
-        '0'..='9' => {
-          let mut num = String::from(ch,);
-          while chars.peek().is_some() && (num.clone() + &chars.peek().unwrap().1.to_string()).parse::<f32>().is_ok() {
-            num += &chars.next().unwrap().1.to_string();
-          }
-          tokens.push(num,)
-        }
-        '*' | '/' | '+' | '-' => {
-          let mut tok = String::from(ch,);
-          if chars.peek().unwrap().1 == '=' {
-            tok.push(chars.next().unwrap().1,);
-          }
-          tokens.push(tok,);
-        }
-        _ => unreachable!(),
-      }
-      // end of actual code
-
-      // break;
-    }
-    dbg!(tokens[0].clone());
-    dbg!(tokens[1].clone());
-    dbg!(tokens[2].clone());
-    dbg!(tokens[3].clone());
-    dbg!(tokens[4].clone());
-    // Confirm it splits into 2.4, PLUS, 3.5
-  }
-
+  // Figure out the problem with the text file not having a paragraph break at the
+  // end currently skips the last character
   #[test]
   fn tokens_are_generated() {
-    let source = r#"//Confirming the comments are ignored
+    let source = fs::read_to_string("src/tests/tokenizing_test.txt",).unwrap();
 
-    ()  [] {}
-    let mut a = "test string"
-    //Confirm it catches number literals
-    let b = 4.5
-    b = 5.0
-    "#;
-    let tokens = tokenize(source,);
+    let mut tokenizer = Tokenizer::new();
+    let tokens = tokenizer.tokenize(&source,);
 
-    // Check the token kinds
     assert_eq!(tokens[0].kind, TokenKind::LEFT_PAREN);
     assert_eq!(tokens[1].kind, TokenKind::RIGHT_PAREN);
     assert_eq!(tokens[2].kind, TokenKind::LEFT_BRACKET);
@@ -238,77 +191,75 @@ mod test {
     assert_eq!(tokens[5].kind, TokenKind::RIGHT_BRACE);
     assert_eq!(tokens[6].kind, TokenKind::LET);
     assert_eq!(tokens[7].kind, TokenKind::MUT);
-    if let TokenKind::IDENTIFIER(idx,) = tokens[8].kind {
-      let str = lookup(idx,);
-      assert_eq!("a", str)
-    }
-    else {
-      panic!("{:?}", tokens[8].kind)
-    };
+    assert_eq_identifier_or_literal(tokens[8], TokenKind::IDENTIFIER(Symbol::from(0,),), "a",);
     assert_eq!(tokens[9].kind, TokenKind::EQUAL);
-    if let TokenKind::STRING(idx,) = tokens[10].kind {
-      let str = lookup(idx,);
-      assert_eq!("\"test string\"", str)
-    }
-    else {
-      panic!("{:?}", tokens[10].kind)
-    };
+    assert_eq_identifier_or_literal(tokens[10], TokenKind::STRING(Symbol::from(0,),), "\"test string\"",);
     assert_eq!(tokens[11].kind, TokenKind::LET);
-    if let TokenKind::IDENTIFIER(idx,) = tokens[12].kind {
-      let str = lookup(idx,);
-      assert_eq!("b", str)
-    }
-    else {
-      panic!("{:?}", tokens[12].kind)
-    };
+    assert_eq_identifier_or_literal(tokens[12], TokenKind::IDENTIFIER(Symbol::from(0,),), "b",);
     assert_eq!(tokens[13].kind, TokenKind::EQUAL);
-    if let TokenKind::FLOAT(idx,) = tokens[14].kind {
-      let str = lookup(idx,);
-      assert_eq!("4.5", str)
-    }
-    else {
-      panic!("{:?}", tokens[14].kind)
-    };
-    if let TokenKind::IDENTIFIER(idx,) = tokens[15].kind {
-      let str = lookup(idx,);
-      assert_eq!("b", str)
-    }
-    else {
-      panic!("{:?}", tokens[15].kind)
+    assert_eq_identifier_or_literal(tokens[14], TokenKind::FLOAT(Symbol::from(0,),), "4.5",);
+    assert_eq_identifier_or_literal(tokens[15], TokenKind::IDENTIFIER(Symbol::from(0,),), "b",);
+    assert_eq!(tokens[16].kind, TokenKind::EQUAL);
+    assert_eq_identifier_or_literal(tokens[17], TokenKind::FLOAT(Symbol::from(0,),), "5.0",);
+    assert_eq_identifier_or_literal(tokens[18], TokenKind::INT(Symbol::from(0,),), "1",);
+    assert_eq!(tokens[19].kind, TokenKind::RANGE_RIGHT_EX);
+    assert_eq_identifier_or_literal(tokens[20], TokenKind::INT(Symbol::from(0,),), "2",);
+    assert_eq_identifier_or_literal(tokens[21], TokenKind::INT(Symbol::from(0,),), "1",);
+    assert_eq!(tokens[22].kind, TokenKind::RANGE_RIGHT_IN);
+    assert_eq_identifier_or_literal(tokens[23], TokenKind::INT(Symbol::from(0,),), "2",);
+  }
+
+  #[test]
+  fn token_location_is_correct() {
+    let source = fs::read_to_string("src/tests/tokenizing_test.txt",).unwrap();
+
+    let mut tokenizer = Tokenizer::new();
+    let tokens = tokenizer.tokenize(&source,);
+
+    // Check the locations
+    assert_eq!((tokens[0].loc.line, tokens[0].loc.col), (3, 1));
+    assert_eq!((tokens[1].loc.line, tokens[1].loc.col), (3, 2));
+    assert_eq!((tokens[2].loc.line, tokens[2].loc.col), (3, 5));
+    assert_eq!((tokens[3].loc.line, tokens[3].loc.col), (3, 6));
+    assert_eq!((tokens[4].loc.line, tokens[4].loc.col), (3, 8));
+    assert_eq!((tokens[5].loc.line, tokens[5].loc.col), (3, 9));
+    assert_eq!((tokens[6].loc.line, tokens[6].loc.col), (4, 1));
+    assert_eq!((tokens[7].loc.line, tokens[7].loc.col), (4, 5));
+    assert_eq!((tokens[8].loc.line, tokens[8].loc.col), (4, 9));
+    assert_eq!((tokens[9].loc.line, tokens[9].loc.col), (4, 11));
+    assert_eq!((tokens[10].loc.line, tokens[10].loc.col), (4, 13));
+    assert_eq!((tokens[11].loc.line, tokens[11].loc.col), (6, 1));
+    assert_eq!((tokens[12].loc.line, tokens[12].loc.col), (6, 5));
+    assert_eq!((tokens[13].loc.line, tokens[13].loc.col), (6, 7));
+    assert_eq!((tokens[11].loc.line, tokens[11].loc.col), (6, 1));
+    assert_eq!((tokens[14].loc.line, tokens[14].loc.col), (6, 9));
+    assert_eq!((tokens[15].loc.line, tokens[15].loc.col), (7, 1));
+    assert_eq!((tokens[16].loc.line, tokens[16].loc.col), (7, 3));
+    assert_eq!((tokens[11].loc.line, tokens[11].loc.col), (6, 1));
+    assert_eq!((tokens[17].loc.line, tokens[17].loc.col), (7, 5));
+    assert_eq!((tokens[18].loc.line, tokens[18].loc.col), (8, 1));
+    assert_eq!((tokens[19].loc.line, tokens[19].loc.col), (8, 2));
+    assert_eq!((tokens[20].loc.line, tokens[20].loc.col), (8, 4));
+    assert_eq!((tokens[21].loc.line, tokens[21].loc.col), (8, 6));
+    assert_eq!((tokens[22].loc.line, tokens[22].loc.col), (8, 7));
+    assert_eq!((tokens[23].loc.line, tokens[23].loc.col), (8, 10));
+  }
+
+  fn assert_eq_identifier_or_literal(token:Token, expected_kind:TokenKind, expected_val:&str,) {
+    //Get the symbol of the incoming token
+    let symbol = match token.kind {
+      TokenKind::IDENTIFIER(symbol,) => symbol,
+      TokenKind::INT(symbol,) => symbol,
+      TokenKind::FLOAT(symbol,) => symbol,
+      TokenKind::STRING(symbol,) => symbol,
+      _ => unreachable!("{:?} at {:?} is not an identifier or literal", token.kind, token.loc),
     };
 
-    //Check the locations
-    assert_eq!(tokens[0].loc.line, 3);
-    assert_eq!(tokens[0].loc.col, 1 + 4);
-    assert_eq!(tokens[1].loc.line, 3);
-    assert_eq!(tokens[1].loc.col, 2 + 4);
-    assert_eq!(tokens[2].loc.line, 3);
-    assert_eq!(tokens[2].loc.col, 5 + 4);
-    assert_eq!(tokens[3].loc.line, 3);
-    assert_eq!(tokens[3].loc.col, 6 + 4);
-    assert_eq!(tokens[4].loc.line, 3);
-    assert_eq!(tokens[4].loc.col, 8 + 4);
-    assert_eq!(tokens[5].loc.line, 3);
-    assert_eq!(tokens[5].loc.col, 9 + 4);
-    assert_eq!(tokens[6].loc.line, 4);
-    assert_eq!(tokens[6].loc.col, 1 + 4);
-    assert_eq!(tokens[7].loc.line, 4);
-    assert_eq!(tokens[7].loc.col, 5 + 4);
-    assert_eq!(tokens[8].loc.line, 4);
-    assert_eq!(tokens[8].loc.col, 9 + 4);
-    assert_eq!(tokens[9].loc.line, 4);
-    assert_eq!(tokens[9].loc.col, 11 + 4);
-    assert_eq!(tokens[10].loc.line, 4);
-    assert_eq!(tokens[10].loc.col, 12 + 4);
-    assert_eq!(tokens[11].loc.line, 6);
-    assert_eq!(tokens[11].loc.col, 1 + 4);
-    assert_eq!(tokens[12].loc.line, 6);
-    assert_eq!(tokens[12].loc.col, 5 + 4);
-    assert_eq!(tokens[13].loc.line, 6);
-    assert_eq!(tokens[13].loc.col, 7 + 4);
-    assert_eq!(tokens[14].loc.line, 6);
-    assert_eq!(tokens[14].loc.col, 9 + 4);
-    assert_eq!(tokens[15].loc.line, 7);
-    assert_eq!(tokens[15].loc.col, 1 + 4);
+    if token.kind == expected_kind {
+      assert_eq!(expected_val, lookup(symbol.idx,))
+    }
+    else {
+      panic!("{:?} at {:?} does not match expected kind: {:?}", token.kind, token.loc, expected_kind)
+    }
   }
 }

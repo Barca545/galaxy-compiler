@@ -1,6 +1,6 @@
-use std::fmt::{Debug, Display};
-
 use super::{errors::ParsingError, interner::intern};
+use crate::symbol_table::Symbol;
+use std::fmt::{Debug, Display};
 
 // TODO:
 // - Not sure I need the double colon operator
@@ -8,11 +8,8 @@ use super::{errors::ParsingError, interner::intern};
 // - switch from passing in an interner to using the INTERNER directly
 
 // Refactor:
-// - Have one number type that is an f32 under the hood no float/int distinction
-// - This and the tokenizer need to treat Minus and ! signs as their own token
-//   because they are Unary operators
 // - Use spans (the range of indices in the source code a token covers) instead
-//   of locations
+//   of locations? Or some combo of start location and the token's span?
 
 #[derive(Clone, Copy,)]
 pub(super) struct Location {
@@ -35,7 +32,7 @@ impl Display for Location {
 impl Location {
   /// Create a new [`Location`].
   pub fn new() -> Self {
-    Location { line:1, col:1, index:0, }
+    Location { line:1, col:1, index:1, }
   }
 
   pub fn next(&mut self, newline:bool,) {
@@ -52,6 +49,11 @@ impl Location {
     }
   }
 }
+
+// pub struct Span {
+//   start:Location,
+//   end:Location,
+// }
 
 #[non_exhaustive]
 #[derive(Debug, Eq, Clone, Copy)]
@@ -73,16 +75,20 @@ pub(super) enum TokenKind {
   GREATER, GREATER_EQUAL,
   LESS, LESS_EQUAL, 
   // Literals
-  IDENTIFIER(u32), STRING(u32), INT(u32), FLOAT(u32),
-  TYPE(u32), BOOL(u32),
-
+  IDENTIFIER(Symbol), STRING(Symbol), INT(Symbol), FLOAT(Symbol),
+  TYPE(Symbol), BOOL(Symbol),
+  // Range
+  RANGE_RIGHT_IN, RANGE_RIGHT_EX,
   // Keywords
   AND, OR, 
   TRUE, FALSE,
-  FOR, WHILE, LOOP,
+  IN,
   IF, ELSE, ELSE_IF,
   FN, RETURN, PRINT, 
   LET, MUT, 
+  // Loops
+  FOR, WHILE, 
+  BREAK, CONTINUE,
   // Terminators
   EOF,
 }
@@ -90,29 +96,24 @@ pub(super) enum TokenKind {
 impl TokenKind {
   ///Create a new token type.
   fn new(value:&str,) -> Self {
-    // Return early if the token kind is a string
-    if value.starts_with('\"',) {
+    // Check if it is an string and return early if it is
+    if value.starts_with('"',) {
       // Check if the string terminates, return a ERROR if it does not
-      let idx = intern(value,);
-      return match value.chars().last().unwrap() == '"' {
-        true => TokenKind::STRING(idx,),
+      let sym = Symbol::from(intern(value,),);
+      return match value.ends_with('"',) {
+        true => TokenKind::STRING(sym,),
         false => panic!("{}", &ParsingError::StringNotTerminated.to_string()),
       };
     }
-
-    // Return early if the token kind is a number
-    if value.chars().nth(0,).unwrap().is_numeric() {
-      let idx = intern(value,);
-      // Check if the token is an int or a float
-      if is_float(&value,) {
-        return TokenKind::FLOAT(idx,);
-      }
-      else if value.parse::<u32>().is_ok() {
-        return TokenKind::INT(idx,);
-      }
-      else {
-        panic!("{}", &ParsingError::NotValidNumber(value.to_string()).to_string())
-      }
+    // Check if it is an int and return early if it is
+    else if value.parse::<u32>().is_ok() {
+      let sym = Symbol::from(intern(value,),);
+      return TokenKind::INT(sym,);
+    }
+    // Check if it is an float and return early if it is
+    else if is_float(&value,) {
+      let sym = Symbol::from(intern(value,),);
+      return TokenKind::FLOAT(sym,);
     }
 
     // If the token is a type it is a type declaration
@@ -128,14 +129,14 @@ impl TokenKind {
       || value == "string[]"
       || value == "bool[]"
     {
-      let idx = intern(value,);
-      return TokenKind::TYPE(idx,);
+      let sym = Symbol::from(intern(value,),);
+      return TokenKind::TYPE(sym,);
     }
 
     //If the token is "true" or "false" it is a boolean
     if value == "true" || value == "false" {
-      let idx = intern(value,);
-      return TokenKind::BOOL(idx,);
+      let sym = Symbol::from(intern(value,),);
+      return TokenKind::BOOL(sym,);
     }
 
     match value {
@@ -170,14 +171,15 @@ impl TokenKind {
       ">=" => TokenKind::GREATER_EQUAL,
       "<" => TokenKind::LESS,
       "<=" => TokenKind::LESS_EQUAL,
+      // Range
+      ".." => TokenKind::RANGE_RIGHT_EX,
+      "..=" => TokenKind::RANGE_RIGHT_IN,
       // Keywords
       "and" => TokenKind::AND,
       "or" => TokenKind::OR,
       "true" => TokenKind::TRUE,
       "false" => TokenKind::FALSE,
-      "for" => TokenKind::FOR,
-      "while" => TokenKind::WHILE,
-      "loop" => TokenKind::LOOP,
+      "in" => TokenKind::IN,
       "if" => TokenKind::IF,
       "else" => TokenKind::ELSE,
       "else if" => TokenKind::ELSE_IF,
@@ -186,7 +188,12 @@ impl TokenKind {
       "print" => TokenKind::PRINT,
       "let" => TokenKind::LET,
       "mut" => TokenKind::MUT,
-      _ => TokenKind::IDENTIFIER(intern(value,),),
+      // Loops
+      "for" => TokenKind::FOR,
+      "while" => TokenKind::WHILE,
+      "break" => TokenKind::BREAK,
+      "continue" => TokenKind::CONTINUE,
+      _ => TokenKind::IDENTIFIER(Symbol::from(intern(value,),),),
     }
   }
 }
@@ -204,47 +211,24 @@ impl PartialEq for TokenKind {
   }
 }
 
+///Checks whether a [`String`] is a float.
 fn is_float(val:&str,) -> bool {
-  // Check string only has one period and otherwise only contains numbers
-  let mut period_found = false;
-  for ch in val.chars() {
-    if !ch.is_numeric() {
-      if ch == '.' {
-        if period_found {
-          return false;
-        }
-        else {
-          period_found = true;
-        }
-      }
-      else {
-        return false;
-      }
-    }
-  }
-
-  // If the first and last chars are numeric and it has not other elements other
-  // than a period, it is a float
-  val.chars().nth(0,).unwrap().is_numeric() && val.chars().last().unwrap().is_numeric() && period_found
+  val.parse::<f32>().is_ok()
 }
 
 #[derive(Debug,)]
 ///Intermediary struct for storing the data needed to create a [`Token`].
 pub struct Chunk {
-  loc:Location,
+  pub start:Location,
   val:String,
-  pub newline:bool,
-  pub is_string:bool,
 }
 
 impl Chunk {
   ///Create a new [`Chunk`].
   pub fn new() -> Self {
     Chunk {
-      loc:Location::new(),
+      start:Location::new(),
       val:String::new(),
-      newline:false,
-      is_string:false,
     }
   }
 
@@ -258,33 +242,9 @@ impl Chunk {
 
   ///Emit a [`Token`] and ready a new [`Chunk`].
   pub fn to_token(&mut self,) -> Token {
-    //Ensure the pointer is to the front of the token.
-    let mut loc = self.loc;
-    loc.col -= self.val.chars().count() as u32;
-    loc.index -= self.val.chars().count();
-    let token = Token::new(Some(self.val.clone().as_str(),), loc,);
+    let token = Token::new(Some(self.val.clone().as_str(),), self.start,);
     self.val = String::new();
     token
-  }
-
-  ///Create a new [`Token`] from a [`String`].
-  pub fn new_token(&mut self, val:String,) -> Token {
-    //Ensure the pointer is to the front of the token.
-    let mut loc = self.loc;
-    loc.col -= self.val.chars().count() as u32;
-    loc.index -= self.val.chars().count();
-    let token = Token::new(Some(&String::from(val,),), loc,);
-    token
-  }
-
-  ///Increment the [`Chunk`]'s [`Location`]
-  pub fn next(&mut self,) {
-    self.loc.next(self.newline,);
-    self.newline = false;
-  }
-
-  pub fn loc(&self,) -> Location {
-    self.loc
   }
 }
 
@@ -332,8 +292,20 @@ impl Token {
       TokenKind::STAR | TokenKind::SLASH => 40,
       // Comparison expressions
       TokenKind::EQUAL_EQUAL | TokenKind::NOT_EQUAL | TokenKind::GREATER | TokenKind::GREATER_EQUAL | TokenKind::LESS | TokenKind::LESS_EQUAL => 60,
+      TokenKind::RANGE_RIGHT_IN | TokenKind::RANGE_RIGHT_EX => 50,
       // Anything else should cause the expression parsing to terminate
       _ => 0,
     }
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::is_float;
+
+  #[test]
+  fn check_float() {
+    assert_eq!(is_float("4..3",), false);
+    assert_eq!(is_float("4.3",), true);
   }
 }

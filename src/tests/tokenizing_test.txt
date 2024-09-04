@@ -1,0 +1,10 @@
+// Confirming the comments are ignored!!!!!!!
+
+()  [] {}
+let mut a = "test string"
+// Confirm it catches number literals
+let b = 4.5
+b = 5.0
+1..2 1..=2
+let foo = -1 - 5 
+
