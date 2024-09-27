@@ -68,7 +68,7 @@ pub(super) enum TokenKind {
   // Math
   MINUS, PLUS, SLASH, STAR,
   // Assignment
-  EQUAL, MINUS_EQUAL, PLUS_EQUAL, SLASH_EQUAL, STAR_EQUAL,
+  EQUAL, MINUS_EQUAL, PLUS_EQUAL, SLASH_EQUAL, STAR_EQUAL, ARROW,
   // Equality
   EQUAL_EQUAL,
   NOT, NOT_EQUAL,
@@ -121,12 +121,12 @@ impl TokenKind {
       || value == "float"
       || value == "usize"
       || value == "char"
-      || value == "string"
+      || value == "str"
       || value == "bool"
       || value == "int[]"
       || value == "float[]"
       || value == "usize[]"
-      || value == "string[]"
+      || value == "str[]"
       || value == "bool[]"
     {
       let sym = Symbol::from(intern(value,),);
@@ -163,6 +163,7 @@ impl TokenKind {
       "+=" => TokenKind::PLUS_EQUAL,
       "/=" => TokenKind::SLASH_EQUAL,
       "*=" => TokenKind::STAR_EQUAL,
+      "->" => TokenKind::ARROW,
       // Equality
       "==" => TokenKind::EQUAL_EQUAL,
       "!" => TokenKind::NOT,
@@ -175,8 +176,8 @@ impl TokenKind {
       ".." => TokenKind::RANGE_RIGHT_EX,
       "..=" => TokenKind::RANGE_RIGHT_IN,
       // Keywords
-      "and" => TokenKind::AND,
-      "or" => TokenKind::OR,
+      "&&" => TokenKind::AND,
+      "||" => TokenKind::OR,
       "true" => TokenKind::TRUE,
       "false" => TokenKind::FALSE,
       "in" => TokenKind::IN,
@@ -290,9 +291,16 @@ impl Token {
       // Math expressions
       TokenKind::MINUS | TokenKind::PLUS => 30,
       TokenKind::STAR | TokenKind::SLASH => 40,
-      // Comparison expressions
-      TokenKind::EQUAL_EQUAL | TokenKind::NOT_EQUAL | TokenKind::GREATER | TokenKind::GREATER_EQUAL | TokenKind::LESS | TokenKind::LESS_EQUAL => 60,
       TokenKind::RANGE_RIGHT_IN | TokenKind::RANGE_RIGHT_EX => 50,
+      // Comparison expressions
+      TokenKind::EQUAL_EQUAL
+      | TokenKind::NOT_EQUAL
+      | TokenKind::GREATER
+      | TokenKind::GREATER_EQUAL
+      | TokenKind::LESS
+      | TokenKind::LESS_EQUAL
+      | TokenKind::AND
+      | TokenKind::OR => 60,
       // Anything else should cause the expression parsing to terminate
       _ => 0,
     }

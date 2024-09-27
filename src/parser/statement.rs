@@ -10,8 +10,10 @@ impl Parser {
   pub fn parse_statement(&mut self,) -> Result<Statement,> {
     let statement = match self.peek().kind {
       TokenKind::LET => self.parse_let_statement(),
+      TokenKind::FN => self.parse_item(),
       _ => self.parse_expression_statement(),
     };
+
     self.eat_token_expect(TokenKind::SEMICOLON, "Statements must end with a semicolon.",).unwrap();
     Ok(statement,)
   }

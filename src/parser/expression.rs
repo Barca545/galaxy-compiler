@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, Literal, LiteralKind, P},
+  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, Literal, LiteralKind, UnOp, P},
   token::TokenKind,
 };
 
@@ -25,7 +25,6 @@ impl Parser {
   /// Otherwise returns `None`.
   fn parse_expression_null_detonation(&mut self,) -> Expression {
     // Should be a prefix
-
     match self.peek().kind {
       TokenKind::INT(_,) | TokenKind::FLOAT(_,) | TokenKind::BOOL(_,) => self.parse_literal_expression(),
       TokenKind::IDENTIFIER(_,) => self.parse_ident_expression(),
@@ -49,6 +48,17 @@ impl Parser {
           loc:token.loc,
         }
       }
+      TokenKind::NOT | TokenKind::MINUS => {
+        let token = self.next();
+        let unop = UnOp::from(&token,);
+        let expresion = self.parse_expression(60,);
+        Expression {
+          id:0,
+          kind:ExpressionKind::Unary(unop, P::new(expresion,),),
+          loc:token.loc,
+        }
+      }
+      TokenKind::RETURN => self.parse_return(),
       _ => panic!("Cannot begin an expression with {:?}", self.peek().kind),
     }
   }
@@ -68,6 +78,8 @@ impl Parser {
       | TokenKind::GREATER
       | TokenKind::GREATER_EQUAL
       | TokenKind::LESS
+      | TokenKind::AND
+      | TokenKind::OR
       | TokenKind::LESS_EQUAL => {
         let token = self.next();
         let binop_kind = BinOpKind::from(token,);
@@ -220,6 +232,22 @@ impl Parser {
         iter:P::new(iter,),
         body:P::new(self.parse_block(),),
       },
+      loc:token.loc,
+    }
+  }
+
+  fn parse_return(&mut self,) -> Expression {
+    let token = self.next();
+
+    //If there is more tokens treat that as the expression to return
+    let inner = match self.peek().kind {
+      TokenKind::SEMICOLON => None,
+      _ => Some(P::new(self.parse_expression(0,),),),
+    };
+
+    Expression {
+      id:0,
+      kind:ExpressionKind::Return(inner,),
       loc:token.loc,
     }
   }

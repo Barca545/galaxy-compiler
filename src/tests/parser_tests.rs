@@ -1,87 +1,582 @@
 #[cfg(test)]
 mod tests {
+  use crate::ast::{AssignOpKind, BinOpKind, ExpressionKind, LiteralKind, LocalKind, PatKind, StatementKind, UnOp};
+  use crate::interner::lookup;
   use crate::parser::Parser;
-  // use crate::ast::{BinOpKind, ExpressionKind, LiteralKind, LocalKind,
-  // StatementKind};
-
-  // Add function definitions
-  // Add returns to if statements, functions, and loops
-  // Add key words "and", "in", "not", and "or"
-  // Add back the error checking for the AST
-  // - Eat token expect is not working because it has a hardcoded error message
-  //   and does not print the input error
-  // - Correct statement erroring so expression-statements do not require
-  //   semicolons
-  // - Erroring if tuples are not closed
-  // Should be able to begin a boolean expression with ! (NOT)
-  // Should not require blocks to have semicolons after them
 
   // Add checks to ensure the AST is correct
+
+  // move the test boolean ops into the test declaration
+
+  // do != and == have pemdas?
+
+  // reuse as much of the logic in the blocks so tests can be copy pasted easier
+
   #[test]
-  fn parse_declaration() {
-    // Precedence order error with binops and the slash
-    // -Not tokenizing the slash
+  fn test_declaration() {
     let source = r#"
     // Check the binops work with nums
     let mut value_test = 5 + 6 * 7 / 8;
 
-    // // Check the binops work with boolean statements
+    // Check the binops work with boolean statements
     let value = true != false == true;
 
-    // let value_2 = (2 + 19, 6, 1);
+    // Check tuple expressions parse properly
+    let value_2 = (5 + 6, 7, 8);
+
+    // Check logical and/or and unary expressions parse properly
+    let value_3 = !false && true || false;
     "#;
 
     let mut parser = Parser::new(source,);
     let ast = parser.parse();
+
+    // Check AST
+
+    // First Declaration
+    match ast.statements.clone()[0].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, true);
+            assert_eq!(lookup(raw.symbol.idx), "value_test");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        match local.kind.clone() {
+          LocalKind::Init(local,) => {
+            match &local.kind {
+              ExpressionKind::BinOp(lhs, op, rhs,) => {
+                // Test the lhs
+                match &lhs.kind {
+                  ExpressionKind::Literal(lit,) => {
+                    assert_eq!(&lit.kind, &LiteralKind::Integer);
+                    assert_eq!(lookup(lit.symbol.idx), "5");
+                  }
+                  _ => panic!("Should be a literal"),
+                }
+
+                // Test the op
+                assert_eq!(op, &BinOpKind::PLUS);
+
+                // Test the rhs
+                match &rhs.kind {
+                  ExpressionKind::BinOp(lhs, op, rhs,) => {
+                    // Test the lhs
+                    if let ExpressionKind::BinOp(lhs, op, rhs,) = &lhs.kind {
+                      match &lhs.kind {
+                        ExpressionKind::Literal(lit,) => {
+                          assert_eq!(&lit.kind, &LiteralKind::Integer);
+                          assert_eq!(lookup(lit.symbol.idx), "6");
+                        }
+                        _ => panic!("Should be a literal"),
+                      }
+
+                      // Test the op
+                      assert_eq!(op, &BinOpKind::STAR);
+
+                      match &rhs.kind {
+                        ExpressionKind::Literal(lit,) => {
+                          assert_eq!(&lit.kind, &LiteralKind::Integer);
+                          assert_eq!(lookup(lit.symbol.idx), "7");
+                        }
+                        _ => panic!("Should be a literal"),
+                      }
+                    }
+
+                    // Test the op
+                    assert_eq!(op, &BinOpKind::SLASH);
+
+                    // Test the rhs
+                    match &rhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Integer);
+                        assert_eq!(lookup(lit.symbol.idx), "8");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+                  }
+                  _ => panic!("Should be a binop"),
+                }
+              }
+              _ => panic!("Should be a binop"),
+            }
+          }
+          _ => panic!("Should be a local initiaton"),
+        }
+      }
+      _ => unreachable!(),
+    }
+
+    // Second Declaration
+    match ast.statements.clone()[1].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, false);
+            assert_eq!(lookup(raw.symbol.idx), "value");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        match local.kind.clone() {
+          LocalKind::Init(local,) => {
+            match &local.kind {
+              ExpressionKind::BinOp(lhs, op, rhs,) => {
+                // Test the lhs
+                match &lhs.kind {
+                  ExpressionKind::BinOp(lhs, op, rhs,) => {
+                    // Test the lhs
+                    match &lhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Bool);
+                        assert_eq!(lookup(lit.symbol.idx), "true");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+
+                    assert_eq!(op, &BinOpKind::NOT_EQUAL);
+
+                    // Test the rhs
+                    match &rhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Bool);
+                        assert_eq!(lookup(lit.symbol.idx), "false");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+                  }
+                  _ => panic!("Should be a binop"),
+                }
+
+                assert_eq!(op, &BinOpKind::EQUAL_EQUAL);
+
+                // Test the rhs
+                match &rhs.kind {
+                  ExpressionKind::Literal(lit,) => {
+                    assert_eq!(&lit.kind, &LiteralKind::Bool);
+                    assert_eq!(lookup(lit.symbol.idx), "true");
+                  }
+                  _ => panic!("Should be a literal"),
+                }
+              }
+              _ => panic!("Should be a binop"),
+            }
+          }
+          _ => panic!("Should be a local initiaton"),
+        }
+      }
+      _ => unreachable!(),
+    }
+
+    // Third Declaration
+    match ast.statements.clone()[2].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, false);
+            assert_eq!(lookup(raw.symbol.idx), "value_2");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        match &local.kind {
+          LocalKind::Init(local,) => match &local.kind {
+            ExpressionKind::Tuple(inner,) => {
+              // Test the first tuple element
+              match &inner[0].kind {
+                ExpressionKind::BinOp(lhs, op, rhs,) => {
+                  // Test the lhs
+                  match &lhs.kind {
+                    ExpressionKind::Literal(lit,) => {
+                      assert_eq!(&lit.kind, &LiteralKind::Integer);
+                      assert_eq!(lookup(lit.symbol.idx), "5");
+                    }
+                    _ => panic!("Should be a literal"),
+                  }
+
+                  assert_eq!(op, &BinOpKind::PLUS);
+
+                  // Test the rhs
+                  match &rhs.kind {
+                    ExpressionKind::Literal(lit,) => {
+                      assert_eq!(&lit.kind, &LiteralKind::Integer);
+                      assert_eq!(lookup(lit.symbol.idx), "6");
+                    }
+                    _ => panic!("Should be a literal"),
+                  }
+                }
+                _ => panic!("Should be a binop"),
+              }
+              // Test the second tuple element
+              match &inner[1].kind {
+                ExpressionKind::Literal(lit,) => {
+                  assert_eq!(&lit.kind, &LiteralKind::Integer);
+                  assert_eq!(lookup(lit.symbol.idx), "7");
+                }
+                _ => panic!("Should be a literal"),
+              }
+
+              // Test the third tuple element
+              match &inner[2].kind {
+                ExpressionKind::Literal(lit,) => {
+                  assert_eq!(&lit.kind, &LiteralKind::Integer);
+                  assert_eq!(lookup(lit.symbol.idx), "8");
+                }
+                _ => panic!("Should be a literal"),
+              }
+            }
+            _ => panic!("Should be a tuple"),
+          },
+          _ => panic!("Should be a local initiaton"),
+        }
+      }
+      _ => unreachable!(),
+    }
+
+    // Fourth Declaration
+    match ast.statements.clone()[3].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, false);
+            assert_eq!(lookup(raw.symbol.idx), "value_3");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        // Check the expression
+        match &local.kind {
+          LocalKind::Init(local,) => {
+            match &local.kind {
+              ExpressionKind::BinOp(lhs, op, rhs,) => {
+                // Test the lhs
+                match &lhs.kind {
+                  ExpressionKind::BinOp(lhs, op, rhs,) => {
+                    // Test the lhs
+                    match &lhs.kind {
+                      ExpressionKind::Unary(op, exp,) => {
+                        assert_eq!(op, &UnOp::Not);
+                        match &exp.kind {
+                          ExpressionKind::Literal(lit,) => {
+                            assert_eq!(&lit.kind, &LiteralKind::Bool);
+                            assert_eq!(lookup(lit.symbol.idx), "false");
+                          }
+                          _ => panic!("Should be a literal"),
+                        }
+                      }
+                      _ => panic!("Should be a unary op"),
+                    }
+
+                    // Test the op
+                    assert_eq!(op, &BinOpKind::AND);
+
+                    // Test the rhs
+                    match &rhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Bool);
+                        assert_eq!(lookup(lit.symbol.idx), "true");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+                  }
+                  _ => panic!("Should be a binop"),
+                }
+
+                // Test the op
+                assert_eq!(op, &BinOpKind::OR);
+
+                // Test the rhs
+                match &rhs.kind {
+                  ExpressionKind::Literal(lit,) => {
+                    assert_eq!(&lit.kind, &LiteralKind::Bool);
+                    assert_eq!(lookup(lit.symbol.idx), "false");
+                  }
+                  _ => panic!("Should be a literal"),
+                }
+              }
+              _ => panic!("Should be a binop"),
+            }
+          }
+          _ => panic!("Should be a local initiaton"),
+        }
+      }
+      _ => panic!("Should be a local initiaton"),
+    }
   }
 
   #[test]
-  fn parse_reassignment() {
+  fn test_reassignment() {
     let source = r#"
-    // Check reassignment works
-    value_test = 5;
-
-    value_test += 5;
+    // Check [re]assignment works
+    let value_test = 5;
+    value_test += 6;
     "#;
 
     let mut parser = Parser::new(source,);
     let ast = parser.parse();
+
+    match ast.statements.clone()[0].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, false);
+            assert_eq!(lookup(raw.symbol.idx), "value_test");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        // Check the expression
+        match &local.kind {
+          LocalKind::Init(local,) => match &local.kind {
+            ExpressionKind::Literal(lit,) => {
+              assert_eq!(&lit.kind, &LiteralKind::Integer);
+              assert_eq!(lookup(lit.symbol.idx), "5");
+            }
+            _ => panic!("Should be a literal"),
+          },
+          _ => panic!("Should be a local initiaton"),
+        }
+      }
+      _ => unreachable!(),
+    }
+
+    match ast.statements.clone()[1].kind.clone() {
+      StatementKind::Expression(expr,) => match expr.kind {
+        ExpressionKind::AssignOp(ident, op, val,) => {
+          match &ident.kind {
+            ExpressionKind::Ident(ident,) => {
+              assert_eq!(lookup(ident.symbol.idx), "value_test")
+            }
+            _ => panic!("Should be an ident"),
+          }
+
+          assert_eq!(op, AssignOpKind::PLUS_EQUAL);
+
+          match &val.kind {
+            ExpressionKind::Literal(lit,) => {
+              assert_eq!(&lit.kind, &LiteralKind::Integer);
+              assert_eq!(lookup(lit.symbol.idx), "6");
+            }
+            _ => panic!("Should be a literal"),
+          }
+        }
+        _ => panic!("{:?}Should be an assign", expr.kind),
+      },
+      _ => unreachable!(),
+    }
   }
 
   #[test]
-  fn parse_if_expression() {
+  fn test_if_expression() {
     let source = r#"
     let test = if true != false {
-      let a = 90;
+      let a = 5;
     }
     else {
-      let a = 50;
+      let a = 6;
     };
     "#;
 
     let mut parser = Parser::new(source,);
     let ast = parser.parse();
+
+    match ast.statements.clone()[0].kind.clone() {
+      StatementKind::Let(local,) => {
+        // Check mutability
+        match local.pat.clone().kind.clone() {
+          PatKind::Ident(raw,) => {
+            assert_eq!(raw.mutable, false);
+            assert_eq!(lookup(raw.symbol.idx), "test");
+          }
+          _ => panic!("Should be an identity"),
+        }
+
+        // Check the expression
+        match &local.kind {
+          LocalKind::Init(local,) => {
+            match &local.kind {
+              ExpressionKind::If(cond, body, else_body,) => {
+                // Check the condition
+                match &cond.kind {
+                  ExpressionKind::BinOp(lhs, op, rhs,) => {
+                    // Test lhs
+                    match &lhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Bool);
+                        assert_eq!(lookup(lit.symbol.idx), "true");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+                    // Test op
+                    assert_eq!(op, &BinOpKind::NOT_EQUAL);
+
+                    // Test rhs
+                    match &rhs.kind {
+                      ExpressionKind::Literal(lit,) => {
+                        assert_eq!(&lit.kind, &LiteralKind::Bool);
+                        assert_eq!(lookup(lit.symbol.idx), "false");
+                      }
+                      _ => panic!("Should be a literal"),
+                    }
+                  }
+                  _ => panic!("Should be a binop"),
+                }
+
+                // Check the body
+                match &body.inner_block[0].kind {
+                  StatementKind::Let(local,) => {
+                    // Check mutability
+                    match local.pat.clone().kind.clone() {
+                      PatKind::Ident(raw,) => {
+                        assert_eq!(raw.mutable, false);
+                        assert_eq!(lookup(raw.symbol.idx), "a");
+                      }
+                      _ => panic!("Should be an identity"),
+                    }
+
+                    match &local.kind {
+                      LocalKind::Init(local,) => match &local.kind {
+                        ExpressionKind::Literal(lit,) => {
+                          assert_eq!(&lit.kind, &LiteralKind::Integer);
+                          assert_eq!(lookup(lit.symbol.idx), "5");
+                        }
+                        _ => panic!("Should be a literal"),
+                      },
+                      _ => panic!("Should be local declaration"),
+                    }
+                  }
+                  _ => unreachable!(),
+                }
+
+                // Check the else
+                match &else_body.as_ref().unwrap().inner_block[0].kind {
+                  StatementKind::Let(local,) => {
+                    // Check mutability
+                    match local.pat.clone().kind.clone() {
+                      PatKind::Ident(raw,) => {
+                        assert_eq!(raw.mutable, false);
+                        assert_eq!(lookup(raw.symbol.idx), "a");
+                      }
+                      _ => panic!("Should be an identity"),
+                    }
+
+                    match &local.kind {
+                      LocalKind::Init(local,) => match &local.kind {
+                        ExpressionKind::Literal(lit,) => {
+                          assert_eq!(&lit.kind, &LiteralKind::Integer);
+                          assert_eq!(lookup(lit.symbol.idx), "6");
+                        }
+                        _ => panic!("Should be a literal"),
+                      },
+                      _ => panic!("Should be local declaration"),
+                    }
+                  }
+                  _ => unreachable!(),
+                }
+              }
+              _ => panic!("Should be an if expression"),
+            }
+          }
+          _ => panic!("Should be local declaration"),
+        }
+      }
+      _ => unreachable!(),
+    }
   }
 
   #[test]
-  fn parse_while_loop() {
+  fn test_while_loop() {
     let source = r#"
     while true {
-      value_test += 40;
+      let mut value_test = 5;
+      value_test += 6
+      ;
     };
     "#;
 
     let mut parser = Parser::new(source,);
     let ast = parser.parse();
+
+    match ast.statements.clone()[0].kind.clone() {
+      StatementKind::Expression(expr,) => match &expr.kind {
+        ExpressionKind::WhileLoop(cond, body,) => {
+          // Test the condition
+          match &cond.kind {
+            ExpressionKind::Literal(lit,) => {
+              assert_eq!(&lit.kind, &LiteralKind::Bool);
+              assert_eq!(lookup(lit.symbol.idx), "true");
+            }
+            _ => panic!("Should be a literal"),
+          }
+
+          // Test the body
+          match body.inner_block.clone()[0].kind.clone() {
+            StatementKind::Let(local,) => {
+              // Check mutability
+              match local.pat.clone().kind.clone() {
+                PatKind::Ident(raw,) => {
+                  assert_eq!(raw.mutable, true);
+                  assert_eq!(lookup(raw.symbol.idx), "value_test");
+                }
+                _ => panic!("Should be an identity"),
+              }
+
+              // Check the expression
+              match &local.kind {
+                LocalKind::Init(local,) => match &local.kind {
+                  ExpressionKind::Literal(lit,) => {
+                    assert_eq!(&lit.kind, &LiteralKind::Integer);
+                    assert_eq!(lookup(lit.symbol.idx), "5");
+                  }
+                  _ => panic!("Should be a literal"),
+                },
+                _ => panic!("Should be a local initiaton"),
+              }
+            }
+            _ => unreachable!(),
+          }
+
+          match body.inner_block.clone()[1].kind.clone() {
+            StatementKind::Expression(expr,) => match expr.kind {
+              ExpressionKind::AssignOp(ident, op, val,) => {
+                match &ident.kind {
+                  ExpressionKind::Ident(ident,) => {
+                    assert_eq!(lookup(ident.symbol.idx), "value_test")
+                  }
+                  _ => panic!("Should be an ident"),
+                }
+
+                assert_eq!(op, AssignOpKind::PLUS_EQUAL);
+
+                match &val.kind {
+                  ExpressionKind::Literal(lit,) => {
+                    assert_eq!(&lit.kind, &LiteralKind::Integer);
+                    assert_eq!(lookup(lit.symbol.idx), "6");
+                  }
+                  _ => panic!("Should be a literal"),
+                }
+              }
+              _ => panic!("{:?}Should be an assign", expr.kind),
+            },
+            _ => unreachable!(),
+          }
+        }
+        _ => panic!("Should be a while loop"),
+      },
+      _ => unreachable!(),
+    }
   }
 
   #[test]
-  fn parse_for_loop() {
+  fn test_for_loop() {
     let source = r#"
-    while true {
-      break;
-    };
-
     for n in 1..2 {
       let test = 1;
       if false {
@@ -101,55 +596,21 @@ mod tests {
     let ast = parser.parse();
   }
 
-  fn parse_works() {
-    // C:\Users\Jamari\.cargo\bin\cargo.exe 'test', '--package',
-    // 'galaxy-compiler', '--bin', 'galaxy-compiler', '--',
-    // 'parser::tests::parse_works', '--exact', '--show-output'
-    // '--nocapture'
+  #[test]
+  fn test_fn_declaration() {
+    // Add return parsing
+    let source = r#"
+    fn test(num:int, string:str, boolean:bool,){
+      let t = 4; 
+    };
 
-    // Switch how equal signs are handled?
-    // https://craftinginterpreters.com/global-variables.html#assignment
-    // To fix this, variable() should look for and consume the = only if it’s in
-    // the context of a low-precedence expression. The code that knows the
-    // current precedence is, logically enough, parsePrecedence(). The
-    // variable() function doesn’t need to know the actual level. It just
-    // cares that the precedence is low enough to allow assignment, so we
-    // pass that fact in as a Boolean.
+    fn test_2(num:int, string:str, boolean:bool) -> bool {
+      let t = 4; 
+      return t;
+    };
+    "#;
 
-    //Check the AST is correct
-    // match ast.statements.clone()[0].kind.clone() {
-    //   //Check the let statement
-    //   StatementKind::Let(local,) => {
-    //     match &local.kind {
-    //       LocalKind::Init(expr,) => match &expr.kind {
-    //         ExpressionKind::BinOp(lhs, op, rhs,) => {
-    //           //Check the value of the lhs
-    //           match &lhs.kind {
-    //             ExpressionKind::Literal(lit,) => {
-    //               assert_eq!(&lit.kind, &LiteralKind::Integer)
-    //             }
-    //             _ => panic!(),
-    //           }
-
-    //           //Check the value of the rhs
-    //           match &rhs.kind {
-    //             ExpressionKind::Literal(lit,) => {
-    //               assert_eq!(&lit.kind, &LiteralKind::Integer)
-    //             }
-    //             _ => panic!(),
-    //           }
-
-    //           //Check the value of the op
-    //           assert_eq!(*op, BinOpKind::PLUS);
-    //         }
-    //         _ => panic!(),
-    //       },
-    //       _ => panic!(),
-    //     };
-    //   }
-    //   _ => panic!(),
-    // }
-
-    // dbg!(ast.statements.clone()[0].kind.clone());
+    let mut parser = Parser::new(source,);
+    let ast = parser.parse();
   }
 }

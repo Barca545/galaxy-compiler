@@ -118,7 +118,7 @@ impl Tokenizer {
           }
           // self.eat_whitespace()
         }
-        ',' | ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
+        ',' | ':' | ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
           if self.current.len() > 0 {
             self.tokens.push(self.current.to_token(),);
           }
@@ -134,6 +134,11 @@ impl Tokenizer {
           self.current.push(ch,);
           //Check for a not equal
           if ch == '!' && Some(&'=',) == self.source.peek() {
+            let ch = self.next().unwrap();
+            self.current.push(ch,);
+          }
+          //Check for an arrow
+          if ch == '-' && Some(&'>',) == self.source.peek() {
             let ch = self.next().unwrap();
             self.current.push(ch,);
           }

@@ -30,6 +30,7 @@ use std::{iter::Peekable, vec::IntoIter};
 // - For ease of use maybe the parsing for let statements and the parsing for
 //   the identifier pattern can be distinct
 // - Could parse pattern be a match statement
+// - Figure out proper ID assignment so they are not all
 
 // TO DO:
 // - Use ANSI escape codes to color the errors
