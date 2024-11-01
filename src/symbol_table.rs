@@ -9,6 +9,7 @@ use std::fmt::Debug;
 //   tables are actually used.
 // - Rename the "graph" holding all the tables. SymbolTables is too close to
 //   SymbolTable.
+// - Should the
 
 // TODO
 // - I do not think the types here and in the AST should not be different.
@@ -140,9 +141,9 @@ mod tests {
     let table = tables.current_mut();
 
     let sym = Symbol::from(intern("test",),);
-    let data = SymbolData::new(DataType::Usize,);
+    let data_ty = SymbolData::new(DataType::Usize,);
 
-    table.set(sym, data,);
+    table.set(sym, data_ty,);
 
     let test_table = &tables.tables[0];
     let test_data = test_table.get(&sym, &tables,);
@@ -157,5 +158,16 @@ mod tests {
     //Create multiple children inside the scope with different attribute tables
 
     //Create a deeply nested scope and call get on something in the root scope
+  }
+
+  #[test]
+  fn modify_a_symbol_table_entry() {
+    // Create a table
+
+    // Access a table mutably
+
+    // Alter an entry
+
+    // Check it was altered
   }
 }

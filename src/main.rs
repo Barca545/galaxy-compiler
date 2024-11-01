@@ -58,6 +58,7 @@ use parser::Parser;
 // - Importing?
 // - Documenting comments that generate HTML?
 // - Only dynamic arrays (vectors) defined in std?
+// - Track never used
 
 fn main() {
   let mut parser = Parser::new("fdfd",);

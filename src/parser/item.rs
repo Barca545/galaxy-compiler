@@ -2,7 +2,6 @@ use super::Parser;
 use crate::{
   ast::{FnSig, Item, ItemKind, Statement, StatementKind, Ty, P},
   interner::lookup,
-  symbol_table::Symbol,
   token::TokenKind,
 };
 
@@ -14,7 +13,7 @@ use crate::{
 //   closer
 
 // How does the Fn Item map the params to the calls in the block?
-// I assume this is where the symbol table comes in
+// I assume this is where the symbol table comes in?
 
 impl Parser {
   //Create an item node type/statement

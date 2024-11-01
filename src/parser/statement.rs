@@ -39,6 +39,8 @@ impl Parser {
     //Check for type
     let ty = self.parse_type();
 
+    // Add the new local to the symbol table
+
     let local = Local {
       id,
       loc,
@@ -53,7 +55,7 @@ impl Parser {
   }
 
   pub fn parse_local_kind(&mut self,) -> LocalKind {
-    // If equals sign, parse the output of the next statement, expect an Expression.
+    // If equals sign, parse the output of the next expression.
     if self.eat_token_if_match(TokenKind::EQUAL,) {
       let expression = self.parse_expression(0,);
       return LocalKind::Init(P::new(expression,),);

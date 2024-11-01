@@ -3,19 +3,16 @@ use crate::token::Location;
 use std::{iter::Peekable, vec::IntoIter};
 
 // Refactor:
-// - For the is_comment check, see if there is a way to just make the tokenizer
-//   eat and discard the comment stuff without
-// - Add catching types to the filter pass and move it out of the token
-//   formation. This will make it easier to add types later if desired.
+// - Move catching types out of tokenization? This will make it easier to add
+//   types later if desired.
 // - I think I need to rework how chunks work/remove them from the tokenizer.
+// - Consider making the next function part of push[ing] a ch to the chunk
 // - Create a read_string function that just reads a full string and then
 //   interns it before returning that for the string literals to use
 // - Fix errors to pretty print
 // - Add the len > 0 check into the chunk to token somehow
 // - Add multiline comments
-// - Consider making the next function part of push[ing] a ch to the chunk
 // - Do I need the length checks?
-// - Fix eating whitespace
 
 pub type TokenStream = Vec<Token,>;
 
@@ -44,21 +41,24 @@ impl Tokenizer {
     let next = self.source.next();
     let newline = if next == Some('\n',) { true } else { false };
     self.loc.next(newline,);
-    // dbg!(next.unwrap());
     next
   }
 
   fn eat_whitespace(&mut self,) {
-    // while let Some(ch,) = self.source.peek() {
-    //   if !ch.is_whitespace() {
-    //     break;
-    //   }
-    //   self.next();
-    // }
-    while let Some(ch,) = self.next() {
-      if !ch.is_whitespace() {
-        break;
-      }
+    while let Some(ch,) = self.source.peek() {
+      match ch.is_whitespace() {
+        true => self.next(),
+        false => break,
+      };
+    }
+  }
+
+  fn eat_comment(&mut self,) {
+    while let Some(ch,) = self.source.peek() {
+      match *ch == '\n' {
+        true => break,
+        false => self.next(),
+      };
     }
   }
 
@@ -71,15 +71,6 @@ impl Tokenizer {
       self.current.start.line = self.loc.line;
     }
     self.current.push(ch,);
-  }
-
-  fn eat_comment(&mut self,) {
-    while let Some(ch,) = self.source.peek() {
-      if *ch == '\n' {
-        break;
-      }
-      self.next();
-    }
   }
 
   fn read_string(&mut self,) {
@@ -116,7 +107,7 @@ impl Tokenizer {
           if self.current.len() > 0 {
             self.tokens.push(self.current.to_token(),)
           }
-          // self.eat_whitespace()
+          self.eat_whitespace()
         }
         ',' | ':' | ';' | '(' | ')' | '{' | '}' | '[' | ']' => {
           if self.current.len() > 0 {
