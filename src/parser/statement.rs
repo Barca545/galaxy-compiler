@@ -10,7 +10,7 @@ impl Parser {
   pub fn parse_statement(&mut self,) -> Result<Statement,> {
     let statement = match self.peek().kind {
       TokenKind::LET => self.parse_let_statement(),
-      TokenKind::FN => self.parse_item(),
+      TokenKind::FN => self.parse_func(),
       _ => self.parse_expression_statement(),
     };
 
@@ -34,16 +34,18 @@ impl Parser {
     let id = 0;
     let loc = token.loc;
 
+    let mutable = self.parse_mutability();
+
     let pat = self.parse_pattern();
 
     //Check for type
     let ty = self.parse_type();
 
     // Add the new local to the symbol table
-
     let local = Local {
       id,
       loc,
+      mutable,
       ty,
       pat:P::new(pat,),
       kind:self.parse_local_kind(),

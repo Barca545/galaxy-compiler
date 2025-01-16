@@ -1,0 +1,32 @@
+thread 'main' panicked at compiler\rustc_errors\src\lib.rs:565:9:
+assertion failed: self.stashed_diagnostics.is_empty()
+stack backtrace:
+   0:     0x7ffba86ed484 - std::backtrace::Backtrace::force_capture::hfd565ede45025057
+   1:     0x7ffba86ed3e4 - std::backtrace::Backtrace::force_capture::hfd565ede45025057
+   2:     0x7ffb758c781b - rustc_driver_impl[bb5c5aff8572b7d1]::pretty::print
+   3:     0x7ffba8706a13 - std::panicking::rust_panic_with_hook::hc127690efc49ee75
+   4:     0x7ffba870687b - <std::panicking::begin_panic_handler::StaticStrPayload as core::panic::PanicPayload>::take_box::h94f57593cd6fd692
+   5:     0x7ffba8703bf9 - <std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display>::fmt::h68c935e82fa66028
+   6:     0x7ffba8706576 - rust_begin_unwind
+   7:     0x7ffba875c2a7 - core::panicking::panic_fmt::hb3201b1e0e578609
+   8:     0x7ffba875c382 - core::panicking::panic::h96407a62bf2bfec4
+   9:     0x7ffb7475d7ab - <rustc_errors[80619ffe57e51d97]::DiagCtxtInner as core[26804fd20586e328]::ops::drop::Drop>::drop
+  10:     0x7ff70db232e0 - <unknown>
+  11:     0x7ff70db246f9 - <unknown>
+  12:     0x7ff70db2dfe9 - <unknown>
+  13:     0x7ff70db2b3f3 - <unknown>
+  14:     0x7ff70db1a0bd - <unknown>
+  15:     0x7ff70db0b173 - <unknown>
+  16:     0x7ff70db0975e - <unknown>
+  17:     0x7ff70db06a58 - <unknown>
+  18:     0x7ff70db28696 - <unknown>
+  19:     0x7ff70db2a11c - <unknown>
+  20:     0x7ffba86eb902 - std::rt::lang_start_internal::hb532a4752829f70a
+  21:     0x7ff70db0c06c - <unknown>
+  22:     0x7ff70dec432c - <unknown>
+  23:     0x7ffc191d259d - BaseThreadInitThunk
+  24:     0x7ffc1a90af38 - RtlUserThreadStart
+
+
+rustc version: 1.78.0-nightly (397937d81 2024-02-22)
+platform: x86_64-pc-windows-msvc

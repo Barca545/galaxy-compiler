@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, Literal, LiteralKind, UnOp, P},
+  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, Literal, UnOp, P},
   token::TokenKind,
 };
 
@@ -148,18 +148,9 @@ impl Parser {
   fn parse_literal_expression(&mut self,) -> Expression {
     let token = self.next();
     let val = match token.kind {
-      TokenKind::INT(symbol,) => Literal {
-        kind:LiteralKind::Integer,
-        symbol,
-      },
-      TokenKind::FLOAT(symbol,) => Literal {
-        kind:LiteralKind::Float,
-        symbol,
-      },
-      TokenKind::BOOL(symbol,) => Literal {
-        kind:LiteralKind::Bool,
-        symbol,
-      },
+      TokenKind::INT(i,) => Literal::Integer(i,),
+      TokenKind::FLOAT(f,) => Literal::Float(f,),
+      TokenKind::BOOL(b,) => Literal::Bool(b,),
       _ => unreachable!(),
     };
 

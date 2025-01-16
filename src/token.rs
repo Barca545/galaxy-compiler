@@ -11,8 +11,8 @@ use std::fmt::{Debug, Display};
 // - Use spans (the range of indices in the source code a token covers) instead
 //   of locations? Or some combo of start location and the token's span?
 
-#[derive(Clone, Copy,)]
-pub(super) struct Location {
+#[derive(Clone, Copy, PartialEq,)]
+pub struct Location {
   pub(super) line:u32,
   pub(super) col:u32,
   pub(super) index:usize,
@@ -56,7 +56,7 @@ impl Location {
 // }
 
 #[non_exhaustive]
-#[derive(Debug, Eq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[rustfmt::skip]
 #[allow(non_camel_case_types)]
 pub(super) enum TokenKind {
@@ -75,8 +75,8 @@ pub(super) enum TokenKind {
   GREATER, GREATER_EQUAL,
   LESS, LESS_EQUAL, 
   // Literals
-  IDENTIFIER(Symbol), STRING(Symbol), INT(Symbol), FLOAT(Symbol),
-  TYPE(Symbol), BOOL(Symbol),
+  IDENTIFIER(Symbol), STRING(Symbol), INT(i32), FLOAT(f32),
+  TYPE(Symbol), BOOL(bool),
   // Range
   RANGE_RIGHT_IN, RANGE_RIGHT_EX,
   // Keywords
@@ -106,14 +106,12 @@ impl TokenKind {
       };
     }
     // Check if it is an int and return early if it is
-    else if value.parse::<u32>().is_ok() {
-      let sym = Symbol::from(intern(value,),);
-      return TokenKind::INT(sym,);
+    else if is_int(value,) {
+      return TokenKind::INT(value.parse::<i32>().unwrap(),);
     }
     // Check if it is an float and return early if it is
     else if is_float(&value,) {
-      let sym = Symbol::from(intern(value,),);
-      return TokenKind::FLOAT(sym,);
+      return TokenKind::FLOAT(value.parse::<f32>().unwrap(),);
     }
 
     // If the token is a type it is a type declaration
@@ -135,8 +133,8 @@ impl TokenKind {
 
     //If the token is "true" or "false" it is a boolean
     if value == "true" || value == "false" {
-      let sym = Symbol::from(intern(value,),);
-      return TokenKind::BOOL(sym,);
+      let bol = if value == "true" { true } else { false };
+      return TokenKind::BOOL(bol,);
     }
 
     match value {
@@ -199,22 +197,27 @@ impl TokenKind {
   }
 }
 
-impl PartialEq for TokenKind {
-  fn eq(&self, other:&Self,) -> bool {
-    match (self, other,) {
-      (Self::IDENTIFIER(_,), Self::IDENTIFIER(_,),) => true,
-      (Self::STRING(_,), Self::STRING(_,),) => true,
-      (Self::INT(_,), Self::INT(_,),) => true,
-      (Self::FLOAT(_,), Self::FLOAT(_,),) => true,
-      (Self::BOOL(_,), Self::BOOL(_,),) => true,
-      _ => core::mem::discriminant(self,) == core::mem::discriminant(other,),
-    }
-  }
-}
+// impl PartialEq for TokenKind {
+//   fn eq(&self, other:&Self,) -> bool {
+//     match (self, other,) {
+//       (Self::IDENTIFIER(_,), Self::IDENTIFIER(_,),) => true,
+//       (Self::STRING(_,), Self::STRING(_,),) => true,
+//       (Self::INT(_,), Self::INT(_,),) => true,
+//       (Self::FLOAT(_,), Self::FLOAT(_,),) => true,
+//       (Self::BOOL(_,), Self::BOOL(_,),) => true,
+//       _ => core::mem::discriminant(self,) == core::mem::discriminant(other,),
+//     }
+//   }
+// }
 
-///Checks whether a [`String`] is a float.
+///Checks whether a [`String`] is a [`f32`].
 fn is_float(val:&str,) -> bool {
   val.parse::<f32>().is_ok()
+}
+
+///Checks whether a [`String`] is an [`i32`].
+fn is_int(val:&str,) -> bool {
+  val.parse::<i32>().is_ok()
 }
 
 #[derive(Debug,)]
@@ -249,7 +252,7 @@ impl Chunk {
   }
 }
 
-#[derive(Debug, Clone, Copy,)]
+#[derive(Debug, Clone, Copy, PartialEq,)]
 pub(super) struct Token {
   pub kind:TokenKind,
   pub loc:Location,

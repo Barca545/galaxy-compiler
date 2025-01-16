@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 eyre = "0.3.7"
 thiserror = "1.0.48"
+
+[profile.dev]
+# This prevents the error where clippy lints older versions of the file. No clue what causes that error but it is iritating.
+# incremental = false

@@ -6,6 +6,8 @@ use crate::interner::lookup;
 use std::{
   fmt::{Debug, Display},
   ops::Deref,
+  slice::Iter,
+  vec::IntoIter,
 };
 
 // Refactor:
@@ -16,10 +18,9 @@ use std::{
 // - Does statement actually need to be Clone
 // - Consider breaking in to smaller modules
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct RawIdent {
   pub symbol:Symbol,
-  pub mutable:bool,
   pub loc:Location,
 }
 
@@ -43,12 +44,23 @@ impl<T,> P<T,> {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq,)]
-pub enum LiteralKind {
-  Bool,
-  Integer,
-  Float,
-  Str,
+#[derive(Debug, Clone, PartialEq,)]
+pub enum Literal {
+  Bool(bool,),
+  Integer(i32,),
+  Float(f32,),
+  Str(Symbol,),
+}
+
+impl Display for Literal {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    match self {
+      Literal::Bool(b,) => write!(f, "BOOL({})", b),
+      Literal::Integer(i,) => write!(f, "INT({})", i),
+      Literal::Float(fl,) => write!(f, "FLOAT({})", fl),
+      Literal::Str(symbol,) => write!(f, "STR({})", lookup(symbol.idx)),
+    }
+  }
 }
 
 #[allow(non_camel_case_types)]
@@ -151,16 +163,30 @@ impl Display for AssignOpKind {
   }
 }
 
-#[derive(Debug, Clone,)]
-pub struct Literal {
-  pub kind:LiteralKind,
-  pub symbol:Symbol,
-}
-
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct Block {
   pub inner_block:Vec<Statement,>,
   // loc:Location,
+}
+
+impl IntoIterator for Block {
+  type Item = Statement;
+
+  type IntoIter = IntoIter<Statement,>;
+
+  fn into_iter(self,) -> Self::IntoIter {
+    self.inner_block.into_iter()
+  }
+}
+
+impl<'a,> IntoIterator for &'a Block {
+  type Item = &'a Statement;
+
+  type IntoIter = Iter<'a, Statement,>;
+
+  fn into_iter(self,) -> Self::IntoIter {
+    todo!()
+  }
 }
 
 #[derive(Clone, Debug, PartialEq,)]
@@ -179,16 +205,16 @@ impl From<&Token,> for UnOp {
   }
 }
 
-// impl Display for UnOp {
-//   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
-//     match self {
-//       UnOp::Not => write!(f, "NOT"),
-//       UnOp::Minus => write!(f, "MINUS"),
-//     }
-//   }
-// }
+impl Display for UnOp {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    match self {
+      UnOp::Not => write!(f, "!"),
+      UnOp::Minus => write!(f, "-"),
+    }
+  }
+}
 
-#[derive(Clone,)]
+#[derive(Clone, PartialEq,)]
 pub enum ExpressionKind {
   Literal(P<Literal,>,),
   ///A binary operation (e.g.`true == false`).
@@ -206,15 +232,13 @@ pub enum ExpressionKind {
   AssignOp(P<Expression,>, AssignOpKind, P<Expression,>,),
   // /// An array (e.g, `[a, b, c, d]`).
   // Array(Vec<P<Expression,>,>,),
-  // /// An array (e.g, `[a, b, c, d]`).
-  // Array(Vec<P<Expression,>,>,),
   /// A tuple (e.g., `(a, b, c, d)`).
   Tuple(Vec<P<Expression,>,>,),
-  /// A while loop, with an optional label.
+  /// A while loop.
   WhileLoop(P<Expression,>, P<Block,>,),
   /// A `for` loop.
   ///
-  /// A for expression extracts values from an iterator, looping until the
+  /// A `for` expression extracts values from an iterator, looping until the
   /// iterator is empty This is desugared to a combination of `loop` and
   /// `match` expressions (e.g. `for <pat> in <expr> <block>`). ()
   ForLoop {
@@ -241,7 +265,7 @@ impl Debug for ExpressionKind {
 impl Display for ExpressionKind {
   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
     match self {
-      Self::Literal(lit,) => write!(f, "LITERAL({})", lookup(lit.symbol.idx),),
+      Self::Literal(lit,) => write!(f, "LITERAL({})", **lit,),
       Self::BinOp(left, op, right,) => write!(f, "BINOP({} {:?} {})", left.kind, op, right.kind),
       Self::Unary(op, expr,) => write!(f, "UNARY({:?} {:?})", op, expr.kind),
       Self::Ident(ident,) => write!(f, "IDENT({})", lookup(ident.symbol.idx)),
@@ -265,7 +289,7 @@ impl Display for ExpressionKind {
   }
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct Expression {
   pub id:usize,
   pub kind:ExpressionKind,
@@ -277,9 +301,20 @@ pub enum Ty {
   Int,
   Float,
   Usize,
-  Char,
-  Array(P<Ty,>,),
+  Str,
   Bool,
+  Array(P<Ty,>,),
+}
+
+impl Ty {
+  ///Creates a new [`Ty::Array`] containing the passed `Ty`.
+  pub fn new_array(ty:Ty,) -> Self {
+    Ty::Array(P::new(ty,),)
+  }
+
+  pub fn copy(&self,) -> Self {
+    self.clone()
+  }
 }
 
 impl Ty {
@@ -288,13 +323,12 @@ impl Ty {
       "int" => Some(Ty::Int,),
       "float" => Some(Ty::Float,),
       "usize" => Some(Ty::Usize,),
-      "char" => Some(Ty::Char,),
-      "str" => Some(Ty::Array(P::new(Ty::Char,),),),
+      "str" => Some(Ty::Str,),
       "bool" => Some(Ty::Bool,),
       "int[]" => Some(Ty::Array(P::new(Ty::Int,),),),
       "float[]" => Some(Ty::Array(P::new(Ty::Float,),),),
       "usize[]" => Some(Ty::Array(P::new(Ty::Usize,),),),
-      "str[]" => Some(Ty::Array(P::new(Ty::Array(P::new(Ty::Char,),),),),),
+      "str[]" => Some(Ty::Array(P::new(Ty::Str,),),),
       //shouldn't return none should return an error that it is not a valid type?
       _ => None,
     }
@@ -302,79 +336,91 @@ impl Ty {
 
   ///Returns `true` if the [`Ty`] is a [`Ty::Int`].
   pub fn is_int(&self,) -> bool {
-    &Ty::Int == self
+    self == &Ty::Int
   }
 
   ///Returns `true` if the [`Ty`] is a [`Ty::Float`].
   pub fn is_float(&self,) -> bool {
-    &Ty::Float == self
+    self == &Ty::Float
   }
 
-  ///Returns `true` if the [`Ty`] is a [`Ty::Char`].
-  pub fn is_char(&self,) -> bool {
-    &Ty::Char == self
-  }
-
-  ///Returns `true` if the [`Ty`] is a `String` ([`Ty::Array`] of
-  /// [`Ty::Char`]).
+  ///Returns `true` if the [`Ty`] is a [`Ty::Str`].
   pub fn is_string(&self,) -> bool {
-    match self {
-      Ty::Array(inner,) => **inner == Ty::Char,
-      _ => false,
-    }
+    self == &Ty::Str
   }
 }
 
 /// A function signature.
-#[derive(Clone,)]
+#[derive(Clone, PartialEq,)]
 pub struct FnSig {
-  pub params:Vec<Ty,>,
+  pub params:Vec<(Symbol, Ty,),>,
   pub result:Option<Ty,>,
 }
 
-#[derive(Clone,)]
-pub enum ItemKind {
-  /// A function definition.
-  Fn { sig:FnSig, body:P<Block,>, },
-}
-
-impl Display for ItemKind {
-  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
-    match self {
-      ItemKind::Fn { sig, body, } => write!(f, "([PARAMS UNIMPLEMENTED]) {{{:?}}}", body),
-    }
-  }
-}
-
-impl Debug for ItemKind {
-  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
-    Display::fmt(&self, f,)
-  }
-}
-
-#[derive(Clone,)]
-pub struct Item {
+#[derive(Clone, PartialEq,)]
+pub struct Func {
   pub id:usize,
   pub loc:Location,
-  pub name:Symbol,
-  pub kind:ItemKind,
+  pub name:RawIdent,
+  pub sig:FnSig,
+  pub body:P<Block,>,
 }
 
-impl Display for Item {
+impl Display for Func {
   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
-    match &self.kind {
-      ItemKind::Fn { sig, body, } => write!(f, "Fn {:?} ([PARAMS UNIMPLEMENTED]) {{{:?}}}", lookup(self.name.idx), body),
-    }
+    write!(f, "([PARAMS UNIMPLEMENTED]) {{{:?}}}", self.body)
   }
 }
 
-impl Debug for Item {
+impl Debug for Func {
   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
     Display::fmt(&self, f,)
   }
 }
 
-#[derive(Debug, Clone,)]
+// #[derive(Clone, PartialEq,)]
+// pub enum ItemKind {
+//   /// A function definition.
+//   Fn { sig:FnSig, body:P<Block,>, },
+// }
+
+// impl Display for ItemKind {
+//   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+//     match self {
+//       ItemKind::Fn { sig, body, } => write!(f, "([PARAMS UNIMPLEMENTED])
+// {{{:?}}}", body),     }
+//   }
+// }
+
+// impl Debug for ItemKind {
+//   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+//     Display::fmt(&self, f,)
+//   }
+// }
+
+// #[derive(Clone, PartialEq,)]
+// pub struct Item {
+//   pub id:usize,
+//   pub loc:Location,
+//   pub name:Symbol,
+//   pub kind:ItemKind,
+// }
+
+// impl Display for Item {
+//   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+//     match &self.kind {
+//       ItemKind::Fn { sig, body, } => write!(f, "Fn {:?} ([PARAMS
+// UNIMPLEMENTED]) {{{:?}}}", lookup(self.name.idx), body),     }
+//   }
+// }
+
+// impl Debug for Item {
+//   fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+//     Display::fmt(&self, f,)
+//   }
+// }
+
+#[derive(Debug, Clone, PartialEq,)]
 pub enum PatKind {
   Ident(RawIdent,),
   Range {
@@ -385,7 +431,7 @@ pub enum PatKind {
   Tuple(P<Vec<Pat,>,>,),
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct Pat {
   pub id:usize,
   ///[`Location`] of the first element in the statement
@@ -393,7 +439,7 @@ pub struct Pat {
   pub kind:PatKind,
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub enum LocalKind {
   ///Local declaration with an initializer. Example: `let x = y;`
   Init(P<Expression,>,),
@@ -401,25 +447,28 @@ pub enum LocalKind {
   Decl,
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
+/// A local variable. May or may not be variable.
 pub struct Local {
   pub id:usize,
   ///[`Location`] of the first element in the statement
   pub loc:Location,
   ///Type of the local.
   pub ty:Option<P<Ty,>,>,
+  pub mutable:bool,
   pub pat:P<Pat,>,
   pub kind:LocalKind,
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub enum StatementKind {
   Let(P<Local,>,),
   Expression(Expression,),
-  Item(Item,),
+  // Item(Item,),
+  Func(Func,),
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct Statement {
   pub id:usize,
   ///[`Location`] of the first element in the statement

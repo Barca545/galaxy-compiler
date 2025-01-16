@@ -174,12 +174,7 @@ impl Tokenizer {
 
 #[cfg(test)]
 mod test {
-  use crate::{
-    interner::lookup,
-    symbol_table::Symbol,
-    token::{Token, TokenKind},
-    tokenizer::Tokenizer,
-  };
+  use crate::{symbol_table::Symbol, token::TokenKind, tokenizer::Tokenizer};
   use std::fs;
 
   // Figure out the problem with the text file not having a paragraph break at the
@@ -199,22 +194,22 @@ mod test {
     assert_eq!(tokens[5].kind, TokenKind::RIGHT_BRACE);
     assert_eq!(tokens[6].kind, TokenKind::LET);
     assert_eq!(tokens[7].kind, TokenKind::MUT);
-    assert_eq_identifier_or_literal(tokens[8], TokenKind::IDENTIFIER(Symbol::from(0,),), "a",);
+    assert_eq!(tokens[8].kind, TokenKind::IDENTIFIER(Symbol::from("a"),));
     assert_eq!(tokens[9].kind, TokenKind::EQUAL);
-    assert_eq_identifier_or_literal(tokens[10], TokenKind::STRING(Symbol::from(0,),), "\"test string\"",);
+    assert_eq!(tokens[10].kind, TokenKind::STRING(Symbol::from("\"test string\"",),));
     assert_eq!(tokens[11].kind, TokenKind::LET);
-    assert_eq_identifier_or_literal(tokens[12], TokenKind::IDENTIFIER(Symbol::from(0,),), "b",);
+    assert_eq!(tokens[12].kind, TokenKind::IDENTIFIER(Symbol::from("b"),));
     assert_eq!(tokens[13].kind, TokenKind::EQUAL);
-    assert_eq_identifier_or_literal(tokens[14], TokenKind::FLOAT(Symbol::from(0,),), "4.5",);
-    assert_eq_identifier_or_literal(tokens[15], TokenKind::IDENTIFIER(Symbol::from(0,),), "b",);
+    assert_eq!(tokens[14].kind, TokenKind::FLOAT(4.5,));
+    assert_eq!(tokens[15].kind, TokenKind::IDENTIFIER(Symbol::from("b",),),);
     assert_eq!(tokens[16].kind, TokenKind::EQUAL);
-    assert_eq_identifier_or_literal(tokens[17], TokenKind::FLOAT(Symbol::from(0,),), "5.0",);
-    assert_eq_identifier_or_literal(tokens[18], TokenKind::INT(Symbol::from(0,),), "1",);
+    assert_eq!(tokens[17].kind, TokenKind::FLOAT(5.0,));
+    assert_eq!(tokens[18].kind, TokenKind::INT(1,),);
     assert_eq!(tokens[19].kind, TokenKind::RANGE_RIGHT_EX);
-    assert_eq_identifier_or_literal(tokens[20], TokenKind::INT(Symbol::from(0,),), "2",);
-    assert_eq_identifier_or_literal(tokens[21], TokenKind::INT(Symbol::from(0,),), "1",);
+    assert_eq!(tokens[20].kind, TokenKind::INT(2,));
+    assert_eq!(tokens[21].kind, TokenKind::INT(1,));
     assert_eq!(tokens[22].kind, TokenKind::RANGE_RIGHT_IN);
-    assert_eq_identifier_or_literal(tokens[23], TokenKind::INT(Symbol::from(0,),), "2",);
+    assert_eq!(tokens[23].kind, TokenKind::INT(2,),);
   }
 
   #[test]
@@ -251,23 +246,5 @@ mod test {
     assert_eq!((tokens[21].loc.line, tokens[21].loc.col), (8, 6));
     assert_eq!((tokens[22].loc.line, tokens[22].loc.col), (8, 7));
     assert_eq!((tokens[23].loc.line, tokens[23].loc.col), (8, 10));
-  }
-
-  fn assert_eq_identifier_or_literal(token:Token, expected_kind:TokenKind, expected_val:&str,) {
-    //Get the symbol of the incoming token
-    let symbol = match token.kind {
-      TokenKind::IDENTIFIER(symbol,) => symbol,
-      TokenKind::INT(symbol,) => symbol,
-      TokenKind::FLOAT(symbol,) => symbol,
-      TokenKind::STRING(symbol,) => symbol,
-      _ => unreachable!("{:?} at {:?} is not an identifier or literal", token.kind, token.loc),
-    };
-
-    if token.kind == expected_kind {
-      assert_eq!(expected_val, lookup(symbol.idx,))
-    }
-    else {
-      panic!("{:?} at {:?} does not match expected kind: {:?}", token.kind, token.loc, expected_kind)
-    }
   }
 }

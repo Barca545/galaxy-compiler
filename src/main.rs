@@ -1,12 +1,14 @@
 mod ast;
 mod errors;
 mod interner;
+mod name_resolution;
 mod parser;
 mod reg_allocator;
 mod symbol_table;
-mod tests;
 mod token;
 mod tokenizer;
+mod type_checking;
+mod visitor;
 
 use parser::Parser;
 
@@ -35,9 +37,10 @@ use parser::Parser;
 //    - Eat token expect is not working because it has a hardcoded error message
 //      and does not print the input error
 //    - Erroring if tuples are not closed
+// - Track never used stuff for optimizing out
 
 // Refactor:
-// - Move the tests into their own module.
+// - Break the ast module into an Expression and statement module as well.
 // - let const instead of let mut? -> no mut keyword for declarations only for
 //   references?
 // - Remove range pattern?
@@ -49,6 +52,13 @@ use parser::Parser;
 // - Should not require blocks to have semicolons after them
 //    - Correct statement erroring so expression-statements do not require
 //      semicolons
+// - I don't love the array types being built in? There's no real problem with
+//   it per se but I want to revisit it before finalizing
+// - Do I need "Item"s or can it just be a function? What other Items might I
+//   need in addition to functions?
+// - weird hacky thing where tokens can be checked for equality but token
+//   *kinds* are not checked for the equality of their interiors
+// - If an expression fails to end with a semicolon, say that as an error.
 
 // Lang Features
 // - Type checking
@@ -58,7 +68,11 @@ use parser::Parser;
 // - Importing?
 // - Documenting comments that generate HTML?
 // - Only dynamic arrays (vectors) defined in std?
-// - Track never used
+//    - I kind of do not want to have an std because I want to avoid imports.
+// - How to handle pass by ref vs pass by value
+// - Delayed variable declarations (built into the parser already)
+// - Calling convention? I'm thinking pass by value always  (less efficent but
+//   easier to implement)
 
 fn main() {
   let mut parser = Parser::new("fdfd",);

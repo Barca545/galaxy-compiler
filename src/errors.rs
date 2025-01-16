@@ -1,10 +1,12 @@
+use crate::{interner::lookup, symbol_table::Symbol};
+
 use super::token::TokenKind;
 use thiserror::Error;
 
 // TODO:
 // - Separate lexing and parsing errors
 
-#[derive(Debug, Clone, Error, PartialEq, Eq,)]
+#[derive(Debug, Clone, Error, PartialEq,)]
 pub enum ParsingError {
   #[error("{0:?} is not recognized as a token.")]
   ChunkNotRecognized(String,),
@@ -22,4 +24,10 @@ pub enum ParsingError {
   InvalidType(String,),
   #[error("No statement match")]
   NoStatementMatch,
+}
+
+#[derive(Debug, Error,)]
+pub enum SymbolGenerationErrors {
+  #[error("cannot find value `{}` in this scope.", lookup(symbol.idx))]
+  UnrecognizedIdentifier { symbol:Symbol, },
 }
