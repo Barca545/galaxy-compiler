@@ -232,7 +232,7 @@ mod tests {
         // Check mutability
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "value_test");
+            assert_eq!(lookup(raw.symbol().idx), "value_test");
           }
           _ => panic!("Should be an identity"),
         }
@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(local.mutable, false);
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "value");
+            assert_eq!(lookup(raw.symbol().idx), "value");
           }
           _ => panic!("Should be an identity"),
         }
@@ -363,7 +363,7 @@ mod tests {
         // Check mutability
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "value_2");
+            assert_eq!(lookup(raw.symbol().idx), "value_2");
           }
           _ => panic!("Should be an identity"),
         }
@@ -424,7 +424,7 @@ mod tests {
         // Check mutability
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "value_3");
+            assert_eq!(lookup(raw.symbol().idx), "value_3");
           }
           _ => panic!("Should be an identity"),
         }
@@ -502,7 +502,7 @@ mod tests {
         // Check mutability
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "value_test");
+            assert_eq!(lookup(raw.symbol().idx), "value_test");
           }
           _ => panic!("Should be an identity"),
         }
@@ -526,7 +526,7 @@ mod tests {
         ExpressionKind::AssignOp(ident, op, val,) => {
           match &ident.kind {
             ExpressionKind::Ident(ident,) => {
-              assert_eq!(lookup(ident.symbol.idx), "value_test")
+              assert_eq!(lookup(ident.symbol().idx), "value_test")
             }
             _ => panic!("Should be an ident"),
           }
@@ -565,7 +565,7 @@ mod tests {
         // Check mutability
         match local.pat.clone().kind.clone() {
           PatKind::Ident(raw,) => {
-            assert_eq!(lookup(raw.symbol.idx), "test");
+            assert_eq!(lookup(raw.symbol().idx), "test");
           }
           _ => panic!("Should be an identity"),
         }
@@ -605,7 +605,7 @@ mod tests {
                     // Check mutability
                     match local.pat.clone().kind.clone() {
                       PatKind::Ident(raw,) => {
-                        assert_eq!(lookup(raw.symbol.idx), "a");
+                        assert_eq!(lookup(raw.symbol().idx), "a");
                       }
                       _ => panic!("Should be an identity"),
                     }
@@ -629,7 +629,7 @@ mod tests {
                     // Check mutability
                     match local.pat.clone().kind.clone() {
                       PatKind::Ident(raw,) => {
-                        assert_eq!(lookup(raw.symbol.idx), "a");
+                        assert_eq!(lookup(raw.symbol().idx), "a");
                       }
                       _ => panic!("Should be an identity"),
                     }
@@ -687,7 +687,7 @@ mod tests {
               // Check mutability
               match local.pat.clone().kind.clone() {
                 PatKind::Ident(raw,) => {
-                  assert_eq!(lookup(raw.symbol.idx), "value_test");
+                  assert_eq!(lookup(raw.symbol().idx), "value_test");
                 }
                 _ => panic!("Should be an identity"),
               }
@@ -711,7 +711,7 @@ mod tests {
               ExpressionKind::AssignOp(ident, op, val,) => {
                 match &ident.kind {
                   ExpressionKind::Ident(ident,) => {
-                    assert_eq!(lookup(ident.symbol.idx), "value_test")
+                    assert_eq!(lookup(ident.symbol().idx), "value_test")
                   }
                   _ => panic!("Should be an ident"),
                 }

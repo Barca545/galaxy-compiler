@@ -1,6 +1,7 @@
 mod ast;
 mod errors;
 mod interner;
+mod ir;
 mod name_resolution;
 mod parser;
 mod reg_allocator;

@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, Literal, UnOp, P},
+  ast::{AssignOpKind, BinOpKind, Expression, ExpressionKind, IdentInner, Literal, UnOp, P},
   token::TokenKind,
 };
 
@@ -166,7 +166,7 @@ impl Parser {
     match token.kind {
       TokenKind::IDENTIFIER(_,) => Expression {
         id:0,
-        kind:ExpressionKind::Ident(self.parse_raw_ident(),),
+        kind:ExpressionKind::Ident(IdentInner::Raw(self.parse_raw_ident(),),),
         loc:token.loc,
       },
       _ => unreachable!(),

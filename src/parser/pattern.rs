@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-  ast::{Pat, PatKind, P},
+  ast::{IdentInner, Pat, PatKind, P},
   token::TokenKind,
 };
 
@@ -8,7 +8,7 @@ impl Parser {
   pub fn parse_pattern(&mut self,) -> Pat {
     if let TokenKind::MUT | TokenKind::IDENTIFIER(_,) = self.peek().kind {
       let token = self.peek();
-      let kind = PatKind::Ident(self.parse_raw_ident(),);
+      let kind = PatKind::Ident(IdentInner::Raw(self.parse_raw_ident(),),);
       Pat { id:0, kind, loc:token.loc, }
     }
     else if let TokenKind::LEFT_PAREN = self.peek().kind {

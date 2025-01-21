@@ -41,8 +41,9 @@ pub fn intern(str:&str,) -> u32 {
 }
 
 /// Retrieve a string from the global string [`Interner`] by its key.
-pub fn lookup(idx:u32,) -> String {
-  INTERNER.with_borrow(|interner| interner.lookup(idx,).to_owned(),)
+pub fn lookup<I,>(idx:I,) -> String
+where u32: From<I,> {
+  INTERNER.with_borrow(|interner| interner.lookup(idx.into(),).to_owned(),)
 }
 
 #[cfg(test)]

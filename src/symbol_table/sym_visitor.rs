@@ -3,10 +3,11 @@ use super::{
   SymTy, Symbol,
 };
 use crate::{
-  ast::{AbstractSyntaxTree, Block, Expression, ExpressionKind, Func, Pat, PatKind, RawIdent, Statement, StatementKind, P},
+  ast::{AbstractSyntaxTree, Block, Expression, ExpressionKind, Func, IdentInner, Pat, PatKind, Statement, StatementKind, P},
   errors::SymbolGenerationErrors,
   visitor::{Visitable, Visitor},
 };
+use eyre::Result;
 use std::{
   collections::HashMap,
   fmt::{Debug, Display},
@@ -19,21 +20,12 @@ use std::{
 // - How does a symbol table handle functions come to think of it
 // - Add errors that bubble up if a problem occurs (I think this basically just
 //   boils down to an unrecognized identifier)
-
-//Visit expressions and replace instances of a variable with the DefId
-//It's possible this will necessitate an IR, if so I'll need to look into what
-// a control-flow graph is
-// If I want to avoid making a new IR just for this, I could make identites
-// contain like a trait that allows it to hold a RawIdent or DefId
-// I think it would just be a tag like how Sized works
-// Trait InnerIdent
-// Either that or make RawIdents an Enum...probably this one since it is more
-// straightforward
+// - Get rid of IdentInner. There must be a more elegant way of doing that.
 
 impl Visitable<SymbolTableBuilder,> for AbstractSyntaxTree {
-  fn visit_with(&self, visitor:&mut SymbolTableBuilder,) {
-    for stmt in &self.statements {
-      visitor.visit_stmt(stmt,);
+  fn visit_with(&mut self, visitor:&mut SymbolTableBuilder,) {
+    for stmt in &mut self.statements {
+      visitor.visit_stmt_mut(stmt,);
     }
   }
 }
@@ -78,7 +70,7 @@ impl SymbolTableBuilder {
   }
 
   /// Returns the [`DefId`] for a given [`Symbol`].
-  pub fn lookup(&self, sym:Symbol,) -> DefId {
+  pub fn lookup(&self, sym:Symbol,) -> Result<DefId,> {
     // Traverse the scope stack backwards beginning with the current scope until a
     // symbol's alias is found
     let mut scopeid = Some(self.scopes.last().unwrap().id,);
@@ -87,15 +79,13 @@ impl SymbolTableBuilder {
       let scope = &self.scopes[scopeid.unwrap()];
 
       if let Some(id,) = scope.symbol_alises.get(&sym,) {
-        return *id;
+        return Ok(*id,);
       }
       scopeid = scope.parent;
     }
 
-    // Error it no alias is found
     // Produce an error if an undeclared variable is encountered
-    // print!("{}", );
-    panic!("{}", SymbolGenerationErrors::UnrecognizedIdentifier { symbol:sym, });
+    Err(SymbolGenerationErrors::UnrecognizedIdentifier { symbol:sym, }.into(),)
   }
 }
 
@@ -105,65 +95,67 @@ impl Visitor for SymbolTableBuilder {
   /// Visit the [`Statement`]s in the script. Record variable and function
   /// declarations in a [`SymbolTable`] and replace instances of identies with
   /// the corresponding [`DefId`].
-  fn visit_stmt(&mut self, stmt:&Statement,) {
+  fn visit_stmt_mut(&mut self, stmt:&mut Statement,) {
     // Check if the statement is a let statement
-    match &stmt.kind {
+    match &mut stmt.kind {
       StatementKind::Let(local,) => {
         if let PatKind::Ident(ref ident,) = local.pat.kind {
           // Insert the VarDecl into the symbol table
-          let id = self.table.insert(ident.symbol, SymTy::from(local.ty.clone().unwrap().copy(),), local.mutable,);
+          let id = self
+            .table
+            .insert(ident.symbol(), SymTy::from(local.ty.clone().unwrap().copy(),), local.mutable,);
           // Store the ID indexed by symbol
-          self.scopes.last_mut().unwrap().symbol_alises.insert(ident.symbol, id,);
+          self.scopes.last_mut().unwrap().symbol_alises.insert(ident.symbol(), id,);
         }
       }
-      StatementKind::Expression(expr,) => self.visit_expr(expr,),
-      StatementKind::Func(func,) => self.visit_func(func,),
+      StatementKind::Expression(expr,) => self.visit_expr_mut(expr,),
+      StatementKind::Func(func,) => self.visit_func_mut(func,),
     }
   }
 
-  fn visit_expr(&mut self, expr:&Expression,) -> Self::Result {
+  fn visit_expr_mut(&mut self, expr:&mut Expression,) -> Self::Result {
     // Call visit_expr recursively down to check for any Identies
-    match &expr.kind {
-      ExpressionKind::Ident(ident,) => self.visit_ident(ident,),
+    match &mut expr.kind {
+      ExpressionKind::Ident(ident,) => self.visit_ident_mut(ident,),
       ExpressionKind::BinOp(lhs, _, rhs,) => {
-        self.visit_expr(lhs,);
-        self.visit_expr(rhs,);
+        self.visit_expr_mut(lhs,);
+        self.visit_expr_mut(rhs,);
       }
-      ExpressionKind::Unary(_, expr,) => self.visit_expr(expr,),
+      ExpressionKind::Unary(_, expr,) => self.visit_expr_mut(expr,),
       ExpressionKind::If(cond, block_1, block_2,) => {
-        self.visit_expr(cond,);
+        self.visit_expr_mut(cond,);
 
-        self.visit_block(block_1,);
+        self.visit_block_mut(block_1,);
 
         if let Some(block_2,) = block_2 {
-          self.visit_block(block_2,);
+          self.visit_block_mut(block_2,);
         }
       }
       ExpressionKind::Assign(var, val,) => {
-        self.visit_expr(var,);
-        self.visit_expr(val,);
+        self.visit_expr_mut(var,);
+        self.visit_expr_mut(val,);
       }
       ExpressionKind::AssignOp(var, _, val,) => {
-        self.visit_expr(var,);
-        self.visit_expr(val,);
+        self.visit_expr_mut(var,);
+        self.visit_expr_mut(val,);
       }
       ExpressionKind::Tuple(tup,) => {
         for expr in tup {
-          self.visit_expr(expr,);
+          self.visit_expr_mut(expr,);
         }
       }
       ExpressionKind::WhileLoop(con, body,) => {
-        self.visit_expr(con,);
-        self.visit_block(body,);
+        self.visit_expr_mut(con,);
+        self.visit_block_mut(body,);
       }
       ExpressionKind::ForLoop { pat, iter, body, } => {
         self.visit_pat(pat,);
-        self.visit_expr(iter,);
-        self.visit_block(body,);
+        self.visit_expr_mut(iter,);
+        self.visit_block_mut(body,);
       }
       ExpressionKind::Range { right, left, .. } => {
-        self.visit_expr(right,);
-        self.visit_expr(left,)
+        self.visit_expr_mut(right,);
+        self.visit_expr_mut(left,)
       }
       _ => {}
     }
@@ -171,20 +163,21 @@ impl Visitor for SymbolTableBuilder {
 
   ///Replace [`ExpressionKind::Ident`] with with its [`DefId`] or return an
   /// error if the variable has not been declared.
-  fn visit_ident(&mut self, ident:&RawIdent,) -> Self::Result {
-    let id = self.lookup(ident.symbol,);
+  fn visit_ident_mut(&mut self, ident:&mut IdentInner,) -> Self::Result {
+    let id = self.lookup(ident.symbol(),).unwrap();
     // Replace the Ident with the DefId
+    *ident = IdentInner::DefId(id,)
 
     // There should be some way to replace the current let branch so its logic
     // is handled here
   }
 
-  fn visit_pat(&mut self, pat:&Pat,) -> Self::Result {
-    match &pat.kind {
+  fn visit_pat_mut(&mut self, pat:&mut Pat,) -> Self::Result {
+    match &mut pat.kind {
       PatKind::Ident(ident,) => self.visit_ident(ident,),
       PatKind::Range { start, end, .. } => {
-        self.visit_expr(start,);
-        self.visit_expr(end,);
+        self.visit_expr_mut(start,);
+        self.visit_expr_mut(end,);
       }
       PatKind::Tuple(pats,) => {
         for pat in pats.as_slice() {
@@ -194,16 +187,16 @@ impl Visitor for SymbolTableBuilder {
     }
   }
 
-  fn visit_block(&mut self, block:&Block,) -> Self::Result {
+  fn visit_block_mut(&mut self, block:&mut Block,) -> Self::Result {
     self.new_scope(true,);
-    for stmt in &block.inner_block {
-      self.visit_stmt(stmt,)
+    for stmt in &mut block.inner_block {
+      self.visit_stmt_mut(stmt,)
     }
     self.exit_scope();
   }
 
-  fn visit_func(&mut self, func:&Func,) -> Self::Result {
-    // Insert the function as a locl into the current scope
+  fn visit_func_mut(&mut self, func:&mut Func,) -> Self::Result {
+    // Insert the function's return as a local into the current scope
     match &func.sig.result {
       Some(ret,) => self.insert(func.name.symbol, SymTy::Fn(Some(P::new(SymTy::from(ret,),),),), false,),
       None => self.insert(func.name.symbol, SymTy::Fn(None,), false,),
@@ -220,8 +213,8 @@ impl Visitor for SymbolTableBuilder {
     }
 
     // Handle any declarations or identity usage in the function body
-    for stmt in &func.body.inner_block {
-      self.visit_stmt(stmt,)
+    for stmt in func.body.iter_mut() {
+      self.visit_stmt_mut(stmt,)
     }
     self.exit_scope();
   }
@@ -288,13 +281,19 @@ impl Display for ScopeId {
 
 #[cfg(test)]
 mod test {
+  use std::panic;
+
   use super::SymbolTableBuilder;
   use crate::{
+    ast::{ExpressionKind, FnSig, IdentInner, Literal, LocalKind, StatementKind, Ty, P},
+    interner::lookup,
     parser::Parser,
-    symbol_table::{symbol_table::DefId, SymTy, Symbol},
+    symbol_table::{
+      symbol_table::{DefId, LocalDecl},
+      SymTy, Symbol,
+    },
     visitor::Visitable,
   };
-  use std::panic;
 
   #[test]
   fn lookup_returns_correct_def_id() {
@@ -302,7 +301,6 @@ mod test {
     let mut builder = SymbolTableBuilder::new();
     let sym_1 = Symbol::from("var_1",);
     let sym_2 = Symbol::from("var_2",);
-    // let sym_3 = Symbol::from("var_3",);
 
     builder.insert(sym_1, SymTy::Str, true,);
 
@@ -313,10 +311,10 @@ mod test {
     builder.insert(sym_2, SymTy::Int, true,);
 
     // Confirm lookup works for symbols defined in a parent scope
-    assert_eq!(DefId(0), builder.lookup(sym_1,));
+    assert_eq!(DefId(0), builder.lookup(sym_1,).unwrap());
 
     // Confirm lookup works for symbols stored in the current scope
-    assert_eq!(DefId(1), builder.lookup(sym_2,));
+    assert_eq!(DefId(1), builder.lookup(sym_2,).unwrap());
 
     // Confirm the symbols are in the correct scope
     assert_eq!(builder.scopes[0].symbol_alises.get(&sym_1).unwrap(), &DefId(0));
@@ -335,10 +333,10 @@ mod test {
     builder.insert(sym_2, SymTy::Bool, true,);
 
     // Confirm lookup succeeds for symbols defined in the current orphaned scope
-    assert_eq!(DefId(1), builder.lookup(sym_2,));
+    assert_eq!(DefId(1), builder.lookup(sym_2,).unwrap());
 
     // Confirm lookup fails for symbols defined in higher level scopes
-    let result = catch_unwind_silent(|| builder.lookup(sym_1,),);
+    let result = builder.lookup(sym_1,);
     assert!(result.is_err());
 
     // Confirm the symbols are in the correct scope
@@ -354,26 +352,98 @@ mod test {
 
     // This should cause a new orphaned scope to spawn with 2 variables
     fn test_function(a:int,b:float,){};
+
+    let a:bool = true;
     ";
 
     let mut p = Parser::new(source,);
-    let mut visitor = SymbolTableBuilder::new();
+    let mut builder = SymbolTableBuilder::new();
 
-    let ast = p.parse();
+    let mut ast = p.parse();
 
-    ast.visit_with(&mut visitor,);
+    ast.visit_with(&mut builder,);
 
-    dbg!(visitor.table);
+    // Check the AST has updated correctly
+
+    // Check the type and value of var
+    match &ast.statements[0].kind {
+      StatementKind::Let(local,) => match &local.kind {
+        LocalKind::Init(expr,) => match &expr.kind {
+          ExpressionKind::Literal(lit,) => match **lit {
+            Literal::Integer(int,) => assert_eq!(2, int),
+            _ => panic!("Expected an integer not a {:?}", lit),
+          },
+          _ => panic!("Expected a literal"),
+        },
+        LocalKind::Decl => panic!("Expected an initialized local"),
+      },
+      _ => panic!("Expected a let statment not {:?}", &ast.statements[0].kind),
+    }
+
+    // Check the identity type and the value of var's assingment is correct
+    match &ast.statements[1].kind {
+      StatementKind::Expression(expr,) => match &expr.kind {
+        ExpressionKind::Assign(ident, val,) => match (&ident.kind, &val.kind,) {
+          (ExpressionKind::Ident(inner,), ExpressionKind::Literal(val,),) => {
+            assert_eq!(inner, &IdentInner::DefId(DefId(0)));
+            assert_eq!(**val, Literal::Integer(4));
+          }
+          _ => panic!("Expected the assignment {} = {}", ident.kind, val.kind),
+        },
+        _ => panic!("Expected an assign expression not {}", &expr.kind),
+      },
+      _ => panic!("Expected an expression not {:?}", &ast.statements[0].kind),
+    }
+
+    // Check the signature of function is accurate
+    match &ast.statements[2].kind {
+      StatementKind::Func(func,) => {
+        assert_eq!(
+          func.sig,
+          FnSig {
+            params:vec![(Symbol::from("a"), Ty::Int), (Symbol::from("b"), Ty::Float)],
+            result:None
+          }
+        );
+      }
+      _ => panic!("Expected bool not {:?}", &ast.statements[2].kind),
+    }
+
+    // Check a has the correct type
+    match &ast.statements[3].kind {
+      StatementKind::Let(local,) => match &local.kind {
+        LocalKind::Init(expr,) => match &expr.kind {
+          ExpressionKind::Literal(lit,) => match **lit {
+            Literal::Bool(bool,) => assert_eq!(true, bool),
+            _ => panic!("Expected a bool not a {:?}", lit),
+          },
+          _ => panic!("Expected a literal"),
+        },
+        LocalKind::Decl => panic!("Expected an initialized local"),
+      },
+      _ => panic!("Expected a let statment not {:?}", &ast.statements[0].kind),
+    }
+
+    // Check the symbol table contains the correct symbols
+    assert_eq!(&LocalDecl::new(DefId(0,), SymTy::Int, "var".into(), true,), builder.table.lookup(DefId(0,),));
+    assert_eq!(
+      &LocalDecl::new(DefId(1,), SymTy::Fn(None), "test_function".into(), false,),
+      builder.table.lookup(DefId(1,),)
+    );
+    assert_eq!(&LocalDecl::new(DefId(2,), SymTy::Int, "a".into(), false,), builder.table.lookup(DefId(2,),));
+    assert_eq!(&LocalDecl::new(DefId(3,), SymTy::Float, "b".into(), false,), builder.table.lookup(DefId(3,),));
+    assert_eq!(&LocalDecl::new(DefId(4,), SymTy::Bool, "a".into(), false,), builder.table.lookup(DefId(4,),));
   }
 
   #[test]
-  fn undeclared_local_in_ast_causes_error() {}
+  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: cannot find value `a` in this scope.")]
+  fn undeclared_local_in_ast_causes_error() {
+    let source = "a = 5;";
 
-  fn catch_unwind_silent<F:FnOnce() -> R + panic::UnwindSafe, R,>(f:F,) -> std::thread::Result<R,> {
-    let prev_hook = panic::take_hook();
-    panic::set_hook(Box::new(|_| {},),);
-    let result = panic::catch_unwind(f,);
-    panic::set_hook(prev_hook,);
-    result
+    let mut p = Parser::new(source,);
+    let mut ast = p.parse();
+    let mut builder = SymbolTableBuilder::new();
+
+    ast.visit_with(&mut builder,);
   }
 }

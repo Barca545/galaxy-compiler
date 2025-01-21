@@ -2,11 +2,11 @@ use super::{
   symbol_table::Symbol,
   token::{Location, Token, TokenKind},
 };
-use crate::interner::lookup;
+use crate::{interner::lookup, symbol_table::symbol_table::DefId};
 use std::{
-  fmt::{Debug, Display},
-  ops::Deref,
-  slice::Iter,
+  fmt::{write, Debug, Display},
+  ops::{Deref, DerefMut},
+  slice::IterMut,
   vec::IntoIter,
 };
 
@@ -17,11 +17,30 @@ use std::{
 // - Confirm I need the P around stuff with static sizes / need P at all
 // - Does statement actually need to be Clone
 // - Consider breaking in to smaller modules
+// - Block's inner shouldn't be public
+
+/// A Trait indicating the implementor can be used as the inside of
+/// [`ExpressionKind::Ident`].
 
 #[derive(Debug, Clone, PartialEq,)]
 pub struct RawIdent {
   pub symbol:Symbol,
   pub loc:Location,
+}
+
+#[derive(Debug, Clone, PartialEq,)]
+pub enum IdentInner {
+  Raw(RawIdent,),
+  DefId(DefId,),
+}
+
+impl IdentInner {
+  pub fn symbol(&self,) -> Symbol {
+    match self {
+      IdentInner::Raw(raw_ident,) => raw_ident.symbol,
+      IdentInner::DefId(def_id,) => panic!("DefId does not contain a Symbol"),
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq,)]
@@ -35,6 +54,12 @@ impl<T,> Deref for P<T,> {
 
   fn deref(&self,) -> &Self::Target {
     &*self.ptr
+  }
+}
+
+impl<T,> DerefMut for P<T,> {
+  fn deref_mut(&mut self,) -> &mut Self::Target {
+    &mut *self.ptr
   }
 }
 
@@ -165,7 +190,7 @@ impl Display for AssignOpKind {
 
 #[derive(Debug, Clone, PartialEq,)]
 pub struct Block {
-  pub inner_block:Vec<Statement,>,
+  pub(super) inner_block:Vec<Statement,>,
   // loc:Location,
 }
 
@@ -179,13 +204,9 @@ impl IntoIterator for Block {
   }
 }
 
-impl<'a,> IntoIterator for &'a Block {
-  type Item = &'a Statement;
-
-  type IntoIter = Iter<'a, Statement,>;
-
-  fn into_iter(self,) -> Self::IntoIter {
-    todo!()
+impl Block {
+  pub fn iter_mut(&mut self,) -> IterMut<'_, Statement,> {
+    self.inner_block.iter_mut()
   }
 }
 
@@ -225,7 +246,7 @@ pub enum ExpressionKind {
   /// Vec<Statement> } else { expr }`).
   If(P<Expression,>, P<Block,>, Option<P<Block,>,>,),
   /// Variable reference.
-  Ident(RawIdent,),
+  Ident(IdentInner,),
   /// An assignment (`a = foo()`) .
   Assign(P<Expression,>, P<Expression,>,),
   /// An assignment with an operator (e.g.`a += 1`).
@@ -268,7 +289,10 @@ impl Display for ExpressionKind {
       Self::Literal(lit,) => write!(f, "LITERAL({})", **lit,),
       Self::BinOp(left, op, right,) => write!(f, "BINOP({} {:?} {})", left.kind, op, right.kind),
       Self::Unary(op, expr,) => write!(f, "UNARY({:?} {:?})", op, expr.kind),
-      Self::Ident(ident,) => write!(f, "IDENT({})", lookup(ident.symbol.idx)),
+      Self::Ident(ident,) => match ident {
+        IdentInner::Raw(raw_ident,) => write!(f, "IDENT(RAW({}))", lookup(raw_ident.symbol.idx)),
+        IdentInner::DefId(def_id,) => write!(f, "IDENT(DEF({}))", def_id.0),
+      },
       Self::Assign(left, right,) => write!(f, "ASSIGN({} = {})", left.kind, right.kind),
       Self::AssignOp(left, op, right,) => write!(f, "ASSIGNOP({} {} {})", left.kind, op, right.kind),
       Self::Tuple(elements,) => write!(f, "TUPLE({:?})", elements),
@@ -351,7 +375,7 @@ impl Ty {
 }
 
 /// A function signature.
-#[derive(Clone, PartialEq,)]
+#[derive(Debug, Clone, PartialEq,)]
 pub struct FnSig {
   pub params:Vec<(Symbol, Ty,),>,
   pub result:Option<Ty,>,
@@ -422,7 +446,7 @@ impl Debug for Func {
 
 #[derive(Debug, Clone, PartialEq,)]
 pub enum PatKind {
-  Ident(RawIdent,),
+  Ident(IdentInner,),
   Range {
     start:P<Expression,>,
     end:P<Expression,>,

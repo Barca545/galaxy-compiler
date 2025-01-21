@@ -33,6 +33,12 @@ impl From<u32,> for Symbol {
   }
 }
 
+impl From<Symbol,> for u32 {
+  fn from(value:Symbol,) -> Self {
+    value.into()
+  }
+}
+
 impl From<&str,> for Symbol {
   fn from(value:&str,) -> Self {
     Symbol { idx:intern(value,), }

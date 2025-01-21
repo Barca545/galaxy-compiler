@@ -6,6 +6,8 @@ use std::ops::Index;
 // - I think the types here and in the AST should not be different. Is there
 //   anyway to unify them?
 // - Give LocalDecl a better definition.
+// - All the functions to return the information inside LocalDecl could probably
+//   return refrences
 
 #[derive(Debug,)]
 ///A struct containing the [`declaration information`](LocalDecl) for all the
@@ -72,8 +74,28 @@ pub struct LocalDecl {
 
 impl LocalDecl {
   ///Creates a new [`LocalDecl`].
-  fn new(id:DefId, ty:SymTy, name:Symbol, mutable:bool,) -> Self {
+  pub fn new(id:DefId, ty:SymTy, name:Symbol, mutable:bool,) -> Self {
     Self { id, name, mutable, ty, }
+  }
+
+  /// Returns the [`DefId`].
+  pub fn id(&self,) -> DefId {
+    self.id
+  }
+
+  /// Returns the name as a [`Symbol`].
+  pub fn name(&self,) -> Symbol {
+    self.name
+  }
+
+  /// Returns a boolean indicating whether the local is mutable.
+  pub fn mutable(&self,) -> bool {
+    self.mutable
+  }
+
+  /// Returns the local's [type](SymTy).
+  pub fn ty(&self,) -> SymTy {
+    self.ty.clone()
   }
 }
 
