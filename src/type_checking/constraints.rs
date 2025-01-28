@@ -65,6 +65,7 @@ fn gen_literal_constraint(lit:&Literal, expr:&ExpressionKind, cons:&mut Vec<Cons
     Literal::Integer(_,) => Constraint::new(expr, Term::Int,),
     Literal::Float(_,) => Constraint::new(expr, Term::Float,),
     Literal::Str(_,) => Constraint::new(expr, Term::Str,),
+    _ => todo!(),
   };
 
   cons.push(con,);

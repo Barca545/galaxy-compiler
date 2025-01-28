@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 // Refactor:
 // - Use the final implementation from here: https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html
@@ -41,9 +41,14 @@ pub fn intern(str:&str,) -> u32 {
 }
 
 /// Retrieve a string from the global string [`Interner`] by its key.
-pub fn lookup<I,>(idx:I,) -> String
+pub fn lookup<I:Debug,>(idx:I,) -> String
 where u32: From<I,> {
   INTERNER.with_borrow(|interner| interner.lookup(idx.into(),).to_owned(),)
+}
+
+#[allow(unused)]
+pub fn dbg_interner() {
+  dbg!(INTERNER.with_borrow(|interner| dbg!(interner.map.clone())));
 }
 
 #[cfg(test)]

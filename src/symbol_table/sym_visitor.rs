@@ -3,7 +3,7 @@ use super::{
   SymTy, Symbol,
 };
 use crate::{
-  ast::{AbstractSyntaxTree, Block, Expression, ExpressionKind, Func, IdentInner, Pat, PatKind, Statement, StatementKind, P},
+  ast::{AbstractSyntaxTree, Block, Expression, ExpressionKind, Func, IdentInner, Literal, LocalKind, Pat, PatKind, Statement, StatementKind, P},
   errors::SymbolGenerationErrors,
   visitor::{Visitable, Visitor},
 };
@@ -41,7 +41,7 @@ pub struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
-  fn new() -> Self {
+  pub fn new() -> Self {
     SymbolTableBuilder {
       // symbol_alises:HashMap::new(),
       scopes:vec![Scope::new(ScopeId(0,), None,)],
@@ -87,6 +87,10 @@ impl SymbolTableBuilder {
     // Produce an error if an undeclared variable is encountered
     Err(SymbolGenerationErrors::UnrecognizedIdentifier { symbol:sym, }.into(),)
   }
+
+  pub fn build(&self,) -> SymbolTable {
+    self.table.clone()
+  }
 }
 
 impl Visitor for SymbolTableBuilder {
@@ -99,13 +103,23 @@ impl Visitor for SymbolTableBuilder {
     // Check if the statement is a let statement
     match &mut stmt.kind {
       StatementKind::Let(local,) => {
-        if let PatKind::Ident(ref ident,) = local.pat.kind {
-          // Insert the VarDecl into the symbol table
-          let id = self
-            .table
-            .insert(ident.symbol(), SymTy::from(local.ty.clone().unwrap().copy(),), local.mutable,);
+        // Parse the expression on the other side of the assign
+        // This has to happen before the assigned ident is finalized
+        match &mut local.kind {
+          LocalKind::Init(expr,) => self.visit_expr_mut(expr,),
+          LocalKind::Decl => panic!("Should have factored this out earlier"),
+        }
+
+        let mutable = local.mutable;
+        let ty = SymTy::from(local.ty.clone().unwrap().copy(),);
+        if let PatKind::Ident(ident,) = &mut local.pat.kind {
+          // Insert the LocalDecl into the symbol table
+          let id = self.table.insert(ident.symbol(), ty, mutable,);
+
           // Store the ID indexed by symbol
           self.scopes.last_mut().unwrap().symbol_alises.insert(ident.symbol(), id,);
+
+          *ident = IdentInner::DefId(id,);
         }
       }
       StatementKind::Expression(expr,) => self.visit_expr_mut(expr,),
@@ -116,6 +130,17 @@ impl Visitor for SymbolTableBuilder {
   fn visit_expr_mut(&mut self, expr:&mut Expression,) -> Self::Result {
     // Call visit_expr recursively down to check for any Identies
     match &mut expr.kind {
+      // ExpressionKind::Literal(lit,) => {
+      //   let ty = SymTy::from(**lit,);
+      //   let sym = Symbol::from(**lit,);
+      //   let id = self.table.insert(sym, ty, false,);
+
+      //   self.scopes.last_mut().unwrap().symbol_alises.insert(sym, id,);
+
+      //   **lit = Literal::DefId(id,);
+
+      //   dbg!(lit);
+      // }
       ExpressionKind::Ident(ident,) => self.visit_ident_mut(ident,),
       ExpressionKind::BinOp(lhs, _, rhs,) => {
         self.visit_expr_mut(lhs,);
@@ -157,6 +182,13 @@ impl Visitor for SymbolTableBuilder {
         self.visit_expr_mut(right,);
         self.visit_expr_mut(left,)
       }
+      ExpressionKind::Return(expr,) => {
+        if let Some(expr,) = expr {
+          self.visit_expr_mut(expr,)
+        };
+      }
+      // ExpressionKind::Break => todo!(),
+      // ExpressionKind::Continue => todo!(),
       _ => {}
     }
   }
@@ -166,15 +198,14 @@ impl Visitor for SymbolTableBuilder {
   fn visit_ident_mut(&mut self, ident:&mut IdentInner,) -> Self::Result {
     let id = self.lookup(ident.symbol(),).unwrap();
     // Replace the Ident with the DefId
-    *ident = IdentInner::DefId(id,)
-
+    *ident = IdentInner::DefId(id,);
     // There should be some way to replace the current let branch so its logic
     // is handled here
   }
 
   fn visit_pat_mut(&mut self, pat:&mut Pat,) -> Self::Result {
     match &mut pat.kind {
-      PatKind::Ident(ident,) => self.visit_ident(ident,),
+      PatKind::Ident(ident,) => self.visit_ident_mut(ident,),
       PatKind::Range { start, end, .. } => {
         self.visit_expr_mut(start,);
         self.visit_expr_mut(end,);
@@ -285,8 +316,7 @@ mod test {
 
   use super::SymbolTableBuilder;
   use crate::{
-    ast::{ExpressionKind, FnSig, IdentInner, Literal, LocalKind, StatementKind, Ty, P},
-    interner::lookup,
+    ast::{ExpressionKind, FnSig, IdentInner, Literal, LocalKind, StatementKind, Ty},
     parser::Parser,
     symbol_table::{
       symbol_table::{DefId, LocalDecl},
@@ -353,7 +383,7 @@ mod test {
     // This should cause a new orphaned scope to spawn with 2 variables
     fn test_function(a:int,b:float,){};
 
-    let a:bool = true;
+    let a:int = var;
     ";
 
     let mut p = Parser::new(source,);
@@ -362,6 +392,8 @@ mod test {
     let mut ast = p.parse();
 
     ast.visit_with(&mut builder,);
+
+    // let table = builder.build();
 
     // Check the AST has updated correctly
 
@@ -413,10 +445,14 @@ mod test {
     match &ast.statements[3].kind {
       StatementKind::Let(local,) => match &local.kind {
         LocalKind::Init(expr,) => match &expr.kind {
-          ExpressionKind::Literal(lit,) => match **lit {
-            Literal::Bool(bool,) => assert_eq!(true, bool),
-            _ => panic!("Expected a bool not a {:?}", lit),
+          ExpressionKind::Ident(ident,) => match ident {
+            IdentInner::DefId(id,) => assert_eq!(DefId(0), *id),
+            IdentInner::Raw(raw,) => unreachable!("Should not be {}.", raw),
           },
+          // match **lit {
+          //   Literal::(int,) => assert_eq!(true, bool),
+          //   _ => panic!("Expected an Integer not a {:?}", lit),
+          // },
           _ => panic!("Expected a literal"),
         },
         LocalKind::Decl => panic!("Expected an initialized local"),
@@ -432,7 +468,7 @@ mod test {
     );
     assert_eq!(&LocalDecl::new(DefId(2,), SymTy::Int, "a".into(), false,), builder.table.lookup(DefId(2,),));
     assert_eq!(&LocalDecl::new(DefId(3,), SymTy::Float, "b".into(), false,), builder.table.lookup(DefId(3,),));
-    assert_eq!(&LocalDecl::new(DefId(4,), SymTy::Bool, "a".into(), false,), builder.table.lookup(DefId(4,),));
+    assert_eq!(&LocalDecl::new(DefId(4,), SymTy::Int, "a".into(), false,), builder.table.lookup(DefId(4,),));
   }
 
   #[test]

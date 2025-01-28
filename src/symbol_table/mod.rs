@@ -2,7 +2,7 @@ pub mod sym_visitor;
 pub mod symbol_table;
 
 use crate::{
-  ast::{Ty, P},
+  ast::{Literal, Ty, P},
   interner::{intern, lookup},
 };
 use std::fmt::{Debug, Display};
@@ -45,6 +45,25 @@ impl From<&str,> for Symbol {
   }
 }
 
+impl From<String,> for Symbol {
+  fn from(value:String,) -> Self {
+    Symbol { idx:intern(value.as_str(),), }
+  }
+}
+
+impl From<Literal,> for Symbol {
+  fn from(value:Literal,) -> Self {
+    match value {
+      Literal::Bool(b,) => Symbol { idx:intern(&b.to_string(),), },
+      Literal::Integer(i,) => Symbol { idx:intern(&i.to_string(),), },
+      Literal::Float(f,) => Symbol { idx:intern(&f.to_string(),), },
+      Literal::Usize(u,) => Symbol { idx:intern(&u.to_string(),), },
+      Literal::Str(symbol,) => symbol,
+      // Literal::DefId(_,) => panic!("Cannot make a symbol from a DefId"),
+    }
+  }
+}
+
 #[derive(Clone, PartialEq, Eq,)]
 pub enum SymTy {
   Int,
@@ -73,6 +92,19 @@ impl From<Ty,> for SymTy {
       Ty::Str => SymTy::Str,
       Ty::Bool => SymTy::Bool,
       Ty::Array(p,) => SymTy::Array(P::new(SymTy::from(p.copy(),),),),
+    }
+  }
+}
+
+impl From<Literal,> for SymTy {
+  fn from(value:Literal,) -> Self {
+    match value {
+      Literal::Bool(_,) => Self::Bool,
+      Literal::Integer(_,) => Self::Int,
+      Literal::Float(_,) => Self::Float,
+      Literal::Usize(_,) => Self::Usize,
+      Literal::Str(_,) => Self::Str,
+      // Literal::DefId(_,) => panic!("DefId is not a type"),
     }
   }
 }

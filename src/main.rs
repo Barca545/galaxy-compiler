@@ -60,20 +60,29 @@ use parser::Parser;
 // - weird hacky thing where tokens can be checked for equality but token
 //   *kinds* are not checked for the equality of their interiors
 // - If an expression fails to end with a semicolon, say that as an error.
+// - All errors should bubble up not be unwrapped where they occur. I want them
+//   to store information about the code and try to recover so everything can be
+//   reported at once.
 
 // Lang Features
 // - Type checking
-// - Default args
-// - Custom/semantic types?
+// - No custom types.
+// - Default args -> This could work have functions either accept an `name:type`
+//   or `name:value` where it then registers the type of the value as the type
+//   of `name`
 // - Type inference
-// - Importing?
-// - Documenting comments that generate HTML?
+// - No importing outside of from the header file.
+// - Documenting comments that generate HTML -> I don't think there is any need
+//   for documentation because there are no structures and the code does not get
+//   that complex. Comments should suffice. If I am wrong I will revisit this.
+//   The database for the scripts themselves might want the whole script
+//   documented tho.
 // - Only dynamic arrays (vectors) defined in std?
 //    - I kind of do not want to have an std because I want to avoid imports.
-// - How to handle pass by ref vs pass by value
-// - Delayed variable declarations (built into the parser already)
-// - Calling convention? I'm thinking pass by value always  (less efficent but
-//   easier to implement)
+// - Only pass by value
+// - Delayed variable declarations -> built into the parser already
+// - I kind of want pattern matching. I am unsure in what capacity. If it is too
+//   complex might have to settle for if/then statements
 
 fn main() {
   let mut parser = Parser::new("fdfd",);

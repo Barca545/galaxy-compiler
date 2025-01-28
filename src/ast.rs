@@ -18,6 +18,8 @@ use std::{
 // - Does statement actually need to be Clone
 // - Consider breaking in to smaller modules
 // - Block's inner shouldn't be public
+// - Could I have a ToSymbol trait that replaces the individual symbol impls on
+//   various structs / From implementations on symbol?
 
 /// A Trait indicating the implementor can be used as the inside of
 /// [`ExpressionKind::Ident`].
@@ -26,6 +28,12 @@ use std::{
 pub struct RawIdent {
   pub symbol:Symbol,
   pub loc:Location,
+}
+
+impl Display for RawIdent {
+  fn fmt(&self, f:&mut std::fmt::Formatter<'_,>,) -> std::fmt::Result {
+    write!(f, "{}", self.symbol)
+  }
 }
 
 #[derive(Debug, Clone, PartialEq,)]
@@ -38,7 +46,7 @@ impl IdentInner {
   pub fn symbol(&self,) -> Symbol {
     match self {
       IdentInner::Raw(raw_ident,) => raw_ident.symbol,
-      IdentInner::DefId(def_id,) => panic!("DefId does not contain a Symbol"),
+      IdentInner::DefId(id,) => panic!("DefId does not contain a Symbol"),
     }
   }
 }
@@ -69,12 +77,15 @@ impl<T,> P<T,> {
   }
 }
 
-#[derive(Debug, Clone, PartialEq,)]
+#[derive(Debug, Clone, Copy, PartialEq,)]
 pub enum Literal {
   Bool(bool,),
   Integer(i32,),
   Float(f32,),
+  Usize(u32,),
   Str(Symbol,),
+  // // I feel like there has to be a cleaner way than doing it this way
+  // DefId(DefId,),
 }
 
 impl Display for Literal {
@@ -83,7 +94,9 @@ impl Display for Literal {
       Literal::Bool(b,) => write!(f, "BOOL({})", b),
       Literal::Integer(i,) => write!(f, "INT({})", i),
       Literal::Float(fl,) => write!(f, "FLOAT({})", fl),
+      Literal::Usize(u,) => write!(f, "Usize({})", u),
       Literal::Str(symbol,) => write!(f, "STR({})", lookup(symbol.idx)),
+      // Literal::DefId(id,) => write!(f, "{}", id),
     }
   }
 }
@@ -480,7 +493,9 @@ pub struct Local {
   ///Type of the local.
   pub ty:Option<P<Ty,>,>,
   pub mutable:bool,
+  /// LHS of the local.
   pub pat:P<Pat,>,
+  /// RHS of the local.
   pub kind:LocalKind,
 }
 
@@ -507,6 +522,7 @@ impl Statement {
 }
 
 #[derive(Debug,)]
+/// A program's [abstract syntax tree](https://en.wikipedia.org/wiki/Abstract_syntax_tree).
 pub struct AbstractSyntaxTree {
   pub statements:Vec<Statement,>,
 }

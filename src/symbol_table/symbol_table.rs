@@ -9,22 +9,31 @@ use std::ops::Index;
 // - All the functions to return the information inside LocalDecl could probably
 //   return refrences
 
-#[derive(Debug,)]
+#[derive(Debug, Clone,)]
 ///A struct containing the [`declaration information`](LocalDecl) for all the
 /// locals in the app.
 pub struct SymbolTable {
   vars:Vec<LocalDecl,>,
+  temps:Vec<LocalDecl,>,
 }
 
 impl SymbolTable {
   /// Creates a new `SymbolTable`.
   pub fn new() -> Self {
-    SymbolTable { vars:Vec::new(), }
+    SymbolTable {
+      vars:Vec::new(),
+      temps:Vec::new(),
+    }
   }
 
-  ///Returns the [`LocalDecl`] for a given [`DefId`].
+  ///Returns the [`LocalDecl`] for a given [`DefId`] in the `vars` field.
   pub fn lookup(&self, id:DefId,) -> &LocalDecl {
     &self.vars[id]
+  }
+
+  ///Returns the [`LocalDecl`] for a given [`DefId`] in the `temps` field.
+  pub fn lookup_temp(&self, id:DefId,) -> &LocalDecl {
+    &self.temps[id]
   }
 
   ///Adds a new [`LocalDecl`] to the `SymbolTable`s current scope.
@@ -35,6 +44,18 @@ impl SymbolTable {
 
     self.vars.push(var,);
     id
+  }
+
+  /// Adds a new temporary to the `Temps` field.
+  pub fn new_temp(&mut self, ty:SymTy,) {
+    let id = DefId(self.temps.len(),);
+    let temp = LocalDecl::new(id, ty, Symbol::from(format!("t_{}", id.0),), false,);
+    self.temps.push(temp,);
+  }
+
+  ///Returns the declaration of the last temporary added.
+  pub fn last_temp(&self,) -> &LocalDecl {
+    self.temps.last().unwrap()
   }
 }
 
@@ -62,7 +83,7 @@ impl Display for DefId {
   }
 }
 
-#[derive(Debug, PartialEq,)]
+#[derive(Debug, PartialEq, Clone,)]
 pub struct LocalDecl {
   id:DefId,
   ///The user-defined name of the variable.
